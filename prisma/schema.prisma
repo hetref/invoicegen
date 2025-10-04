@@ -1,0 +1,141 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  lastLoginMethod String?
+  
+  // AI Extraction tracking
+  hasUsedFreeExtraction Boolean @default(false)
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
+}
+
+model Group {
+  id          String   @id
+  name        String
+  userId      String
+  parentId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Self-referential relationship for nested groups
+  parent      Group?   @relation("GroupHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Group[]  @relation("GroupHierarchy")
+  
+  // Invoices in this group
+  invoices    Invoice[]
+
+  @@index([userId])
+  @@index([parentId])
+  @@map("group")
+}
+
+model Invoice {
+  id          String   @id
+  userId      String
+  fileName    String
+  fileSize    Int
+  mimeType    String
+  r2Key       String   // Format: userId/invoiceId/filename
+  groupId     String?  // null means root level
+  uploadedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Invoice source type
+  isManuallyCreated Boolean  @default(false) // true for manually created, false for uploaded
+
+  // AI Extraction fields
+  isExtracted      Boolean  @default(false)
+  extractionStatus String?  // 'pending', 'processing', 'completed', 'failed'
+  extractedAt      DateTime?
+
+  // Extracted invoice data
+  invoiceDate      String?
+  invoiceNumber    String?
+  billedToName     String?
+  billedToAddress  String?
+  billedToGst      String?
+  paymentToName    String?
+  paymentToAddress String?
+  items            Json?    // Array of invoice items
+  paymentDetails   Json?    // Payment account details
+  contactInfo      Json?    // Contact information
+  totalAmount      Float?
+  currency         String?
+
+  // Relation to group
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([groupId])
+  @@map("invoice")
+}

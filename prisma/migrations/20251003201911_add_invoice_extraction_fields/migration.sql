@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "invoice" ADD COLUMN     "billedToAddress" TEXT,
+ADD COLUMN     "billedToGst" TEXT,
+ADD COLUMN     "billedToName" TEXT,
+ADD COLUMN     "contactInfo" JSONB,
+ADD COLUMN     "currency" TEXT,
+ADD COLUMN     "extractedAt" TIMESTAMP(3),
+ADD COLUMN     "extractionStatus" TEXT,
+ADD COLUMN     "invoiceDate" TEXT,
+ADD COLUMN     "invoiceNumber" TEXT,
+ADD COLUMN     "isExtracted" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "items" JSONB,
+ADD COLUMN     "paymentDetails" JSONB,
+ADD COLUMN     "paymentToAddress" TEXT,
+ADD COLUMN     "paymentToName" TEXT,
+ADD COLUMN     "totalAmount" DOUBLE PRECISION;
