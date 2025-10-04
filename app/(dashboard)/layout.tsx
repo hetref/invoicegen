@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import React from "react";
+import { EmailVerificationGuard } from "@/components/EmailVerificationGuard";
 
 const layout = async ({ children }: { children: React.ReactNode }) => {
 
@@ -12,9 +13,9 @@ const layout = async ({ children }: { children: React.ReactNode }) => {
   if(!session) redirect('/sign-in')
 
   return (
-    <div>
+    <EmailVerificationGuard session={session}>
       {children}
-    </div>
+    </EmailVerificationGuard>
   );
 };
 

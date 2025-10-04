@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         email: true,
+        emailVerified: true,
         image: true,
         createdAt: true,
         lastLoginMethod: true,

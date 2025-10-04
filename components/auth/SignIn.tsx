@@ -7,14 +7,19 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { signIn, signInSocial } from '@/lib/actions/auth-actions'
 import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { AlertCircle, Loader2 } from 'lucide-react'
 
 const SignIn = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [lastMethod, setLastMethod] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const router = useRouter();
 
@@ -26,12 +31,24 @@ const SignIn = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle sign in logic here
-    console.log('Sign in:', { email, password })
-    const res = await signIn(email, password)
-    console.log("RES", res);
-    if(res.redirect && res.user) {
-      router.push("/dashboard")
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const res = await signIn(email, password)
+      
+      if (res && 'error' in res) {
+        setError((res as any).error.message || 'Invalid email or password')
+      } else if (res && res.redirect && res.user) {
+        // Redirect to dashboard (verification guard will handle access control)
+        router.push("/dashboard")
+      } else {
+        setError('Invalid email or password')
+      }
+    } catch (error: any) {
+      setError('An unexpected error occurred. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -40,6 +57,7 @@ const SignIn = () => {
       await signInSocial('google')
     } catch (error) {
       console.error('Google sign in error:', error)
+      setError('Failed to sign in with Google. Please try again.')
     }
   }
 
@@ -53,12 +71,20 @@ const SignIn = () => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Google Sign In Button */}
           <div className="relative">
             <Button 
               onClick={handleGoogleSignIn}
               variant="outline"
               className="w-full flex items-center justify-center gap-2 relative"
+              disabled={isLoading}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -95,10 +121,16 @@ const SignIn = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="signin-password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="signin-password">Password</Label>
+                <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="signin-password"
                 type="password"
@@ -106,21 +138,39 @@ const SignIn = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </div>
             <Button 
               type="submit" 
               variant="outline"
               className="w-full flex items-center justify-center gap-2 relative"
+              disabled={isLoading}
             >
-              Sign In
-              {lastMethod === "email" && (
-                <Badge variant="secondary" className="ml-2 text-sm absolute top-[100%] right-0 translate-y-[-50%]">
-                  Last used
-                </Badge>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                <>
+                  Sign In
+                  {lastMethod === "email" && (
+                    <Badge variant="secondary" className="ml-2 text-sm absolute top-[100%] right-0 translate-y-[-50%]">
+                      Last used
+                    </Badge>
+                  )}
+                </>
               )}
             </Button>
           </form>
+
+          <div className="text-center text-sm pt-4">
+            <span className="text-gray-600">Don't have an account? </span>
+            <Link href="/sign-up" className="text-blue-600 hover:underline font-medium">
+              Sign up
+            </Link>
+          </div>
         </div>
       </CardContent>
     </Card>

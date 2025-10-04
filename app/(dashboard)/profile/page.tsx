@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Loader2,
   User,
@@ -26,6 +27,9 @@ import {
   Key,
   Trash2,
   Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -34,9 +38,11 @@ interface UserProfile {
   id: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   image: string | null;
   createdAt: string;
   lastLoginMethod: string | null;
+  hasUsedFreeExtraction: boolean;
 }
 
 interface ProfileStats {
@@ -69,6 +75,7 @@ export default function ProfilePage() {
     secure: false,
   });
   const [isEditingSmtp, setIsEditingSmtp] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const { toast} = useToast();
   const router = useRouter();
 
@@ -245,6 +252,37 @@ export default function ProfilePage() {
     });
   };
 
+  const handleResendVerification = async () => {
+    if (!user?.email) return;
+    
+    setIsResendingVerification(true);
+    try {
+      const { sendVerificationEmail } = await import("@/lib/actions/auth-actions");
+      const result = await sendVerificationEmail(user.email);
+      
+      if (result.success) {
+        toast({
+          title: "Verification Email Sent",
+          description: "Please check your inbox and spam folder.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to send verification email",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResendingVerification(false);
+    }
+  };
+
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -291,19 +329,58 @@ export default function ProfilePage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/dashboard")}
-            className="gap-2 mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </Button>
+          {user.emailVerified && (
+            <Button
+              variant="ghost"
+              onClick={() => router.push("/dashboard")}
+              className="gap-2 mb-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
+            </Button>
+          )}
           <h1 className="text-3xl font-bold">Profile</h1>
           <p className="text-muted-foreground mt-1">
             Manage your account settings and view your statistics
           </p>
         </div>
+
+        {/* Email Verification Warning for Unverified Users */}
+        {!user.emailVerified && (
+          <Alert className="mb-6 bg-yellow-50 border-yellow-200">
+            <AlertCircle className="h-5 w-5 text-yellow-600" />
+            <AlertDescription className="ml-2">
+              <div className="space-y-2">
+                <p className="font-semibold text-yellow-900">
+                  Email Verification Required
+                </p>
+                <p className="text-sm text-yellow-700">
+                  You must verify your email address to access dashboard features. 
+                  Please check your inbox for the verification email or click the button below to resend it.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResendVerification}
+                  disabled={isResendingVerification}
+                  className="mt-2 border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+                >
+                  {isResendingVerification ? (
+                    <>
+                      <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-3 w-3 mr-2" />
+                      Resend Verification Email
+                    </>
+                  )}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Profile Information */}
@@ -390,13 +467,51 @@ export default function ProfilePage() {
                 {/* Email Field */}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span>{user.email}</span>
+                  <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <span>{user.email}</span>
+                    </div>
+                    {user.emailVerified ? (
+                      <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Verified
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Not Verified
+                      </Badge>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Email cannot be changed
-                  </p>
+                  {!user.emailVerified && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        Please verify your email to access all features
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleResendVerification}
+                        disabled={isResendingVerification}
+                        className="text-xs h-7"
+                      >
+                        {isResendingVerification ? (
+                          <>
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          "Resend Verification"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                  {user.emailVerified && (
+                    <p className="text-xs text-muted-foreground">
+                      Email cannot be changed
+                    </p>
+                  )}
                 </div>
 
                 {/* Account Created */}

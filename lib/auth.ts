@@ -3,12 +3,25 @@ import { lastLoginMethod } from "better-auth/plugins";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { PrismaClient } from "./generated/prisma";
 import { nextCookies } from "better-auth/next-js";
+import { sendVerificationEmail, sendPasswordResetEmail } from "./email-verification";
 
 const prisma = new PrismaClient();
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   emailAndPassword: {
     enabled: true,
+    // Don't block sign in, but verify in application layer
+    requireEmailVerification: false,
+    sendResetPassword: async ({ user, url }, request) => {
+      await sendPasswordResetEmail(user.email, user.name, url);
+    },
+  },
+  emailVerification: {
+    sendVerificationEmail: async ({ user, url }, request) => {
+      await sendVerificationEmail(user.email, user.name, url);
+    },
+    sendOnSignUp: true, // Automatically send verification email on sign up
   },
   socialProviders: {
     google: {
