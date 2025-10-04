@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getUploadPresignedUrl } from "@/lib/r2-client";
-import { PrismaClient } from "@/lib/generated/prisma";
+import prisma from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 
-const prisma = new PrismaClient();
 const STORAGE_LIMIT = 40 * 1024 * 1024; // 40 MB in bytes
 
 // POST - Generate presigned URL for upload
@@ -35,7 +34,7 @@ export async function POST(req: NextRequest) {
       select: { fileSize: true },
     });
 
-    const currentUsage = invoices.reduce((sum, inv) => sum + inv.fileSize, 0);
+    const currentUsage = invoices.reduce((sum: number, inv) => sum + inv.fileSize, 0);
     
     if (currentUsage + fileSize > STORAGE_LIMIT) {
       const remainingMB = ((STORAGE_LIMIT - currentUsage) / (1024 * 1024)).toFixed(2);

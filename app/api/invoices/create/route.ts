@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
+import prisma from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { getUploadPresignedUrl, deleteFromR2 } from "@/lib/r2-client";
 
-const prisma = new PrismaClient();
 const STORAGE_LIMIT = 40 * 1024 * 1024; // 40 MB in bytes
 
 export async function POST(req: NextRequest) {
@@ -60,7 +59,7 @@ export async function POST(req: NextRequest) {
       select: { fileSize: true },
     });
 
-    const currentUsage = invoices.reduce((sum, inv) => sum + inv.fileSize, 0) - oldFileSize;
+    const currentUsage = invoices.reduce((sum: number, inv) => sum + inv.fileSize, 0) - oldFileSize;
     const estimatedSize = estimatedFileSize || 500000; // Default 500KB if not provided
     
     if (currentUsage + estimatedSize > STORAGE_LIMIT) {

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 const STORAGE_LIMIT = 40 * 1024 * 1024; // 40 MB in bytes
 
@@ -28,7 +26,7 @@ export async function GET(req: NextRequest) {
       select: { fileSize: true },
     });
 
-    const currentUsage = invoices.reduce((sum, inv) => sum + inv.fileSize, 0);
+    const currentUsage = invoices.reduce((sum: number, inv: typeof invoices[0]) => sum + inv.fileSize, 0);
     const remainingStorage = STORAGE_LIMIT - currentUsage;
     const wouldExceed = currentUsage + newFileSize > STORAGE_LIMIT;
 

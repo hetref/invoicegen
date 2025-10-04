@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 // GET - Get user profile with statistics
 export async function GET(req: NextRequest) {
@@ -46,15 +44,15 @@ export async function GET(req: NextRequest) {
     });
 
     const totalInvoices = invoices.length;
-    const totalSize = invoices.reduce((sum, inv) => sum + inv.fileSize, 0);
-    const uploadedInvoices = invoices.filter(inv => !inv.isManuallyCreated).length;
-    const createdInvoices = invoices.filter(inv => inv.isManuallyCreated).length;
+    const totalSize = invoices.reduce((sum: number, inv: typeof invoices[0]) => sum + inv.fileSize, 0);
+    const uploadedInvoices = invoices.filter((inv: typeof invoices[0]) => !inv.isManuallyCreated).length;
+    const createdInvoices = invoices.filter((inv: typeof invoices[0]) => inv.isManuallyCreated).length;
 
     // Get invoices this month
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const invoicesThisMonth = invoices.filter(
-      inv => new Date(inv.uploadedAt) >= startOfMonth
+      (inv: typeof invoices[0]) => new Date(inv.uploadedAt) >= startOfMonth
     ).length;
 
     // Get total groups

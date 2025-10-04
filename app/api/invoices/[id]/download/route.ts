@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
+import prisma from "@/lib/prisma";
 import { getDownloadPresignedUrl } from "@/lib/r2-client";
-
-const prisma = new PrismaClient();
 
 // GET - Generate presigned URL for download
 export async function GET(

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 // GET - List all invoices for the authenticated user
 export async function GET(req: NextRequest) {

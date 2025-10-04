@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
+import prisma from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
-
-const prisma = new PrismaClient();
 
 // GET - List all groups for the authenticated user (tree structure)
 export async function GET(req: NextRequest) {

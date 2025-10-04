@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { PrismaClient } from "@/lib/generated/prisma";
+import prisma from "@/lib/prisma";
 import { r2Client } from "@/lib/r2-client";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { extractInvoiceData } from "@/lib/gemini-client";
 import { sendExtractionCompleteEmail } from "@/lib/email-client";
-
-const prisma = new PrismaClient();
 
 export async function POST(
   req: NextRequest,
