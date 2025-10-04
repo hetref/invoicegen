@@ -6,6 +6,7 @@ import './globals.css'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { Toaster } from '@/components/ui/toaster'
+import Script from 'next/script'
 
 export const metadata: Metadata = {
   title: 'Invoice Generator',
@@ -25,6 +26,21 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        {/* Google Analytics */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-6PTZS32VKR"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-6PTZS32VKR');
+          `}
+        </Script>
+      </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <Navbar session={session} />
         <Toaster />
