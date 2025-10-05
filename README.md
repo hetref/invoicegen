@@ -398,19 +398,6 @@ InvoiceGen is designed to be easily self-hosted. Perfect for:
    npm start
    ```
 
-### 🐳 Docker Deployment
-
-We provide Docker configurations for easy deployment:
-
-```bash
-# Using Docker Compose
-docker-compose up -d
-
-# Using Docker directly
-docker build -t invoicegen .
-docker run -p 3000:3000 invoicegen
-```
-
 ### 🌐 Cloud Deployment
 
 Deploy to popular platforms:
