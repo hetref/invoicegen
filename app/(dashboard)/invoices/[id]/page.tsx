@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -26,6 +26,15 @@ import {
   Mail,
   Globe,
   Edit,
+  FolderTree,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  HardDrive,
+  Hash,
+  CheckCircle2,
+  AlertCircle,
+  Receipt
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { GroupTree, Group } from "@/components/GroupTree";
@@ -70,6 +79,7 @@ export default function SingleInvoicePage() {
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ hasUsedFreeExtraction: boolean } | null>(null);
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
 
   // Group dialogs
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -118,10 +128,8 @@ export default function SingleInvoicePage() {
     try {
       const response = await fetch(`/api/invoices/${params.id}`);
       if (!response.ok) throw new Error("Failed to fetch invoice");
-      console.log("response", response);
 
       const data = await response.json();
-      console.log("data", data);
       setInvoice(data.invoice);
       setCurrentGroupId(data.invoice.groupId);
 
@@ -129,7 +137,6 @@ export default function SingleInvoicePage() {
       const urlResponse = await fetch(`/api/invoices/${params.id}/download`);
       if (urlResponse.ok) {
         const urlData = await urlResponse.json();
-        console.log("urlData", urlData);
         setInvoiceUrl(urlData.downloadUrl);
       }
     } catch (error) {
@@ -158,7 +165,6 @@ export default function SingleInvoicePage() {
   const handleExtract = async () => {
     setExtracting(true);
     try {
-      // Get active AI configuration from localStorage
       const provider = (localStorage.getItem("ai_provider") as "gemini" | "groq") || "gemini";
       const userApiKey = provider === "groq"
         ? localStorage.getItem("groq_api_key")
@@ -184,11 +190,9 @@ export default function SingleInvoicePage() {
 
       toast({
         title: "Extraction Started",
-        description:
-          "You will receive an email when the extraction is complete.",
+        description: "AI extraction pipeline is analyzing your invoice document.",
       });
 
-      // Refresh invoice data and user profile
       fetchInvoice();
       fetchUserProfile();
     } catch (error: any) {
@@ -224,18 +228,40 @@ export default function SingleInvoicePage() {
     setDeleteDialogOpen(true);
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 className="h-7 w-7 animate-spin text-neutral-600" />
+        <p className="text-xs text-neutral-500 font-medium">Loading invoice details...</p>
       </div>
     );
   }
 
   if (!invoice) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Invoice not found</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-neutral-100 flex items-center justify-center text-neutral-500">
+          <AlertCircle className="h-6 w-6" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-neutral-900">Invoice not found</h2>
+          <p className="text-xs text-neutral-500 mt-1">This invoice may have been deleted or moved.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push("/dashboard")}
+          className="rounded-full text-xs"
+        >
+          Back to Dashboard
+        </Button>
       </div>
     );
   }
@@ -243,16 +269,165 @@ export default function SingleInvoicePage() {
   const isPdf = invoice.mimeType === "application/pdf";
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar - Group Navigation */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Folders</CardTitle>
+    <div className="min-h-screen bg-[#FAFAFA] text-neutral-900 pb-16">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        
+        {/* Top Responsive Context Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-neutral-200/80 shadow-xs">
+          {/* Back & Breadcrumb */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/dashboard")}
+              className="h-8 px-2.5 rounded-full text-xs font-medium text-neutral-600 hover:text-neutral-950 hover:bg-neutral-100 gap-1.5 -ml-1"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back</span>
+            </Button>
+
+            <div className="h-4 w-[1px] bg-neutral-200 hidden sm:block" />
+
+            <div className="flex items-center gap-2 truncate">
+              <span className="text-xs font-semibold text-neutral-950 truncate max-w-[180px] sm:max-w-xs">
+                {invoice.fileName}
+              </span>
+              <span className="text-[11px] font-mono text-neutral-400">
+                ({formatFileSize(invoice.fileSize)})
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons - Touch friendly on mobile */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {/* Download Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownload}
+              className="h-8 px-3 rounded-full text-xs font-medium border-neutral-200 text-neutral-700 hover:bg-neutral-50 gap-1.5 flex-1 sm:flex-initial justify-center"
+            >
+              <Download className="h-3.5 w-3.5 text-neutral-500" />
+              <span>Download</span>
+            </Button>
+
+            {/* Edit button for manually created invoices */}
+            {invoice.isManuallyCreated && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/new?invoiceId=${invoice.id}`)}
+                className="h-8 px-3 rounded-full text-xs font-medium border-neutral-200 text-neutral-700 hover:bg-neutral-50 gap-1.5 flex-1 sm:flex-initial justify-center"
+              >
+                <Edit className="h-3.5 w-3.5 text-neutral-500" />
+                <span>Edit</span>
+              </Button>
+            )}
+
+            {/* Extract button only for uploaded invoices */}
+            {!invoice.isManuallyCreated &&
+              !invoice.isExtracted &&
+              invoice.extractionStatus !== "processing" && (
+                <>
+                  {!hasApiKey && userProfile?.hasUsedFreeExtraction ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block flex-1 sm:flex-initial">
+                            <Button
+                              size="sm"
+                              disabled={true}
+                              className="w-full h-8 px-3 rounded-full text-xs font-medium gap-1.5"
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <span>Extract AI</span>
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs">
+                          <p>Add your Gemini or Groq API key in the Profile page for unlimited AI extractions</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={handleExtract}
+                      disabled={extracting}
+                      className="h-8 px-3.5 rounded-full text-xs font-medium bg-neutral-950 hover:bg-neutral-800 text-white gap-1.5 flex-1 sm:flex-initial justify-center shadow-xs"
+                    >
+                      {extracting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Extracting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>Extract with AI</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </>
+              )}
+
+            {invoice.extractionStatus === "processing" && (
+              <Badge variant="secondary" className="h-8 gap-1.5 px-3 rounded-full text-xs bg-amber-50 text-amber-800 border-amber-200">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Extracting...</span>
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Collapsible Folder Tree Selector */}
+        <div className="block lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileFoldersOpen(!mobileFoldersOpen)}
+            className="w-full flex items-center justify-between p-3 rounded-xl bg-white border border-neutral-200/80 text-xs font-medium text-neutral-700 shadow-2xs"
+          >
+            <div className="flex items-center gap-2">
+              <FolderTree className="h-4 w-4 text-neutral-500" />
+              <span>Drive Folders & Organization</span>
+            </div>
+            {mobileFoldersOpen ? (
+              <ChevronUp className="h-4 w-4 text-neutral-400" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-neutral-400" />
+            )}
+          </button>
+
+          {mobileFoldersOpen && (
+            <div className="mt-2 p-3 rounded-xl bg-white border border-neutral-200/80 shadow-xs">
+              <GroupTree
+                groups={groups}
+                currentGroupId={currentGroupId}
+                onGroupSelect={(groupId) =>
+                  router.push(`/dashboard?group=${groupId || ""}`)
+                }
+                onCreateGroup={handleCreateGroup}
+                onRenameGroup={handleRenameGroup}
+                onDeleteGroup={handleDeleteGroup}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Main Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
+          
+          {/* Desktop Left Sidebar - Group Folders */}
+          <div className="hidden lg:block lg:col-span-3">
+            <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider flex items-center gap-2">
+                  <FolderTree className="h-3.5 w-3.5 text-neutral-500" />
+                  <span>Folders</span>
+                </CardTitle>
               </CardHeader>
-              <CardContent className="px-2">
+              <CardContent className="p-2 pt-0">
                 <GroupTree
                   groups={groups}
                   currentGroupId={currentGroupId}
@@ -267,350 +442,290 @@ export default function SingleInvoicePage() {
             </Card>
           </div>
 
-          {/* Main Content */}
-          <div className="lg:col-span-3">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <Button
-                variant="ghost"
-                onClick={() => router.push("/dashboard")}
-                className="gap-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
-              </Button>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleDownload}
-                  className="gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </Button>
-
-                {/* Edit button for manually created invoices */}
-                {invoice.isManuallyCreated && (
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/new?invoiceId=${invoice.id}`)}
-                    className="gap-2"
-                  >
-                    <Edit className="h-4 w-4" />
-                    Edit
-                  </Button>
-                )}
-
-                {/* Extract button only for uploaded (non-manually created) invoices */}
-                {!invoice.isManuallyCreated &&
-                  !invoice.isExtracted &&
-                  invoice.extractionStatus !== "processing" && (
-                    <>
-                      {!hasApiKey && userProfile?.hasUsedFreeExtraction ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-block">
-                                <Button
-                                  disabled={true}
-                                  className="gap-2"
-                                >
-                                  <Sparkles className="h-4 w-4" />
-                                  Extract Invoice With AI
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <p>Add your own Gemini or Groq API key in the Profile page for unlimited AI extractions</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <Button
-                          onClick={handleExtract}
-                          disabled={extracting}
-                          className="gap-2"
-                        >
-                          {extracting ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Starting...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="h-4 w-4" />
-                              Extract Invoice With AI
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </>
-                  )}
-
-                {invoice.extractionStatus === "processing" && (
-                  <Badge variant="secondary" className="gap-2 px-3 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Extracting...
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left: Invoice Preview */}
-              <Card className="lg:sticky lg:top-6 h-fit">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    {invoice.fileName}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+          {/* Middle & Right Content Area (Desktop 9 cols, Mobile 1 col) */}
+          <div className="lg:col-span-9 grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
+            
+            {/* Document Preview Card */}
+            <div className="lg:col-span-6 lg:sticky lg:top-20">
+              <Card className="rounded-2xl border-neutral-200/80 shadow-xs overflow-hidden">
+                <CardHeader className="p-3.5 sm:p-4 bg-neutral-50/80 border-b border-neutral-200/80 flex flex-row items-center justify-between space-y-0">
+                  <div className="flex items-center gap-2 min-w-0 pr-2">
+                    <FileText className="h-4 w-4 text-neutral-700 shrink-0" />
+                    <span className="text-xs font-semibold text-neutral-900 truncate">
+                      {invoice.fileName}
+                    </span>
+                  </div>
                   {invoiceUrl && (
-                    <div className="w-full">
+                    <a
+                      href={invoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 hover:text-neutral-950 transition-colors shrink-0"
+                    >
+                      <span>Full View</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </CardHeader>
+                <CardContent className="p-2 sm:p-3 bg-neutral-100/50">
+                  {invoiceUrl ? (
+                    <div className="w-full rounded-xl overflow-hidden border border-neutral-200/80 bg-white">
                       {isPdf ? (
                         <iframe
                           src={invoiceUrl}
-                          className="w-full h-[600px] border rounded-md"
-                          title="Invoice PDF"
+                          className="w-full h-[380px] sm:h-[500px] lg:h-[620px]"
+                          title="Invoice PDF Preview"
                         />
                       ) : (
-                        <img
-                          src={invoiceUrl}
-                          alt="Invoice"
-                          className="w-full h-auto border rounded-md"
-                        />
+                        <div className="flex items-center justify-center p-2 bg-neutral-50 min-h-[300px]">
+                          <img
+                            src={invoiceUrl}
+                            alt="Invoice Preview"
+                            className="max-h-[600px] w-auto max-w-full rounded-lg object-contain shadow-xs"
+                          />
+                        </div>
                       )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 text-xs text-neutral-400">
+                      No preview available
                     </div>
                   )}
                 </CardContent>
               </Card>
+            </div>
 
-              {/* Right: Extracted Data */}
-              <div className="space-y-4">
-                {!invoice.isExtracted && !invoice.isManuallyCreated ? (
-                  <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-12">
-                      <Sparkles className="h-12 w-12 text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">
+            {/* Extracted Structured Data Column */}
+            <div className="lg:col-span-6 space-y-4">
+              {!invoice.isExtracted && !invoice.isManuallyCreated ? (
+                <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                  <CardContent className="flex flex-col items-center justify-center py-12 px-4 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-neutral-100 flex items-center justify-center text-neutral-600">
+                      <Sparkles className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-1 max-w-xs">
+                      <h3 className="text-sm font-semibold text-neutral-900">
                         No Extracted Data Yet
                       </h3>
-                      <p className="text-sm text-muted-foreground text-center mb-4">
-                        Click the "Extract Invoice With AI" button to
-                        automatically extract all invoice details using AI.
+                      <p className="text-xs text-neutral-500 leading-relaxed">
+                        Extract vendor details, line items, taxes, and totals automatically using dual-engine AI.
                       </p>
-                    </CardContent>
-                  </Card>
-                ) : invoice.isExtracted || invoice.isManuallyCreated ? (
-                  <>
-                    {/* Basic Info */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Invoice Details
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={handleExtract}
+                      disabled={extracting}
+                      className="rounded-full h-8 px-4 text-xs font-medium bg-neutral-950 text-white hover:bg-neutral-800 gap-1.5 shadow-xs"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>Extract with AI</span>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* Basic Invoice Information Card */}
+                  <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                    <CardHeader className="p-4 pb-2 border-b border-neutral-100">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <Receipt className="h-3.5 w-3.5 text-neutral-500" />
+                          <span>Invoice Summary</span>
                         </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
+                        <Badge variant="outline" className="text-[10px] font-mono border-neutral-200 bg-neutral-50">
+                          {invoice.isManuallyCreated ? "Created" : "AI Parsed"}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-3.5">
+                      <div className="grid grid-cols-2 gap-3">
                         {invoice.invoiceNumber && (
-                          <div>
-                            <p className="text-xs text-muted-foreground">
-                              Invoice Number
-                            </p>
-                            <p className="font-medium">
-                              {invoice.invoiceNumber}
-                            </p>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Number</span>
+                            <p className="text-xs font-mono font-semibold text-neutral-900">{invoice.invoiceNumber}</p>
                           </div>
                         )}
                         {invoice.invoiceDate && (
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-xs text-muted-foreground">
-                                Date
-                              </p>
-                              <p className="font-medium">
-                                {invoice.invoiceDate}
-                              </p>
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider">Date</span>
+                            <div className="flex items-center gap-1 text-xs text-neutral-800">
+                              <Calendar className="h-3 w-3 text-neutral-400" />
+                              <span>{invoice.invoiceDate}</span>
                             </div>
                           </div>
                         )}
-                        {invoice.totalAmount && (
-                          <div>
-                            <p className="text-xs text-muted-foreground">
-                              Total Amount
-                            </p>
-                            <p className="text-2xl font-bold">
-                              {invoice.currency || "INR"}{" "}
-                              {invoice.totalAmount.toFixed(2)}
-                            </p>
+                      </div>
+
+                      {invoice.totalAmount !== null && (
+                        <div className="pt-2 border-t border-neutral-100 flex items-baseline justify-between">
+                          <span className="text-xs text-neutral-500 font-medium">Total Balance</span>
+                          <span className="text-xl sm:text-2xl font-bold font-mono text-neutral-950">
+                            {invoice.currency || "USD"} {Number(invoice.totalAmount).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Billed To Card */}
+                  {invoice.billedToName && (
+                    <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                      <CardHeader className="p-4 pb-2 border-b border-neutral-100">
+                        <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <User className="h-3.5 w-3.5 text-neutral-500" />
+                          <span>Billed To</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-1.5 text-xs">
+                        <p className="font-semibold text-neutral-900">{invoice.billedToName}</p>
+                        {invoice.billedToAddress && (
+                          <p className="text-neutral-600 leading-relaxed flex items-start gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                            <span>{invoice.billedToAddress}</span>
+                          </p>
+                        )}
+                        {invoice.billedToGst && (
+                          <div className="pt-1 text-[11px] font-mono text-neutral-500">
+                            <span>GST/Tax: </span>
+                            <span className="font-semibold text-neutral-800">{invoice.billedToGst}</span>
                           </div>
                         )}
                       </CardContent>
                     </Card>
+                  )}
 
-                    {/* Billed To */}
-                    {invoice.billedToName && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <User className="h-4 w-4" />
-                            Billed To
+                  {/* Payment To Card */}
+                  {invoice.paymentToName && (
+                    <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                      <CardHeader className="p-4 pb-2 border-b border-neutral-100">
+                        <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5 text-neutral-500" />
+                          <span>Payment To (Issuer)</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-1.5 text-xs">
+                        <p className="font-semibold text-neutral-900">{invoice.paymentToName}</p>
+                        {invoice.paymentToAddress && (
+                          <p className="text-neutral-600 leading-relaxed flex items-start gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                            <span>{invoice.paymentToAddress}</span>
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Line Items Card */}
+                  {invoice.items &&
+                    Array.isArray(invoice.items) &&
+                    invoice.items.length > 0 && (
+                      <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                        <CardHeader className="p-4 pb-2 border-b border-neutral-100 flex flex-row items-center justify-between">
+                          <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider">
+                            Line Items ({invoice.items.length})
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-2">
-                          <p className="font-medium">{invoice.billedToName}</p>
-                          {invoice.billedToAddress && (
-                            <p className="text-sm text-muted-foreground flex gap-2">
-                              <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                              {invoice.billedToAddress}
-                            </p>
-                          )}
-                          {invoice.billedToGst && (
-                            <p className="text-sm">
-                              <span className="text-muted-foreground">
-                                GST:
-                              </span>{" "}
-                              {invoice.billedToGst}
-                            </p>
-                          )}
+                        <CardContent className="p-3 sm:p-4 space-y-2">
+                          {invoice.items.map((item: any, index: number) => (
+                            <div
+                              key={index}
+                              className="p-2.5 sm:p-3 rounded-xl bg-neutral-50/80 border border-neutral-200/60 space-y-1 text-xs"
+                            >
+                              <div className="flex justify-between items-start gap-2">
+                                <p className="font-medium text-neutral-900 leading-snug">
+                                  {item.description}
+                                </p>
+                                <span className="font-mono font-semibold text-neutral-950 shrink-0">
+                                  {invoice.currency || "USD"} {item.subtotal || item.total || item.price}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-neutral-500 font-mono">
+                                <span>Qty: {item.qty || 1}</span>
+                                <span>•</span>
+                                <span>Rate: {invoice.currency || "USD"} {item.price || item.rate || item.subtotal}</span>
+                              </div>
+                            </div>
+                          ))}
                         </CardContent>
                       </Card>
                     )}
 
-                    {/* Payment To */}
-                    {invoice.paymentToName && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <CreditCard className="h-4 w-4" />
-                            Payment To
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <p className="font-medium">{invoice.paymentToName}</p>
-                          {invoice.paymentToAddress && (
-                            <p className="text-sm text-muted-foreground flex gap-2">
-                              <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                              {invoice.paymentToAddress}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
+                  {/* Payment Details Card */}
+                  {invoice.paymentDetails && (
+                    <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                      <CardHeader className="p-4 pb-2 border-b border-neutral-100">
+                        <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5 text-neutral-500" />
+                          <span>Banking & Settlement</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-2 text-xs font-mono text-neutral-700">
+                        {invoice.paymentDetails.accountNumber && (
+                          <div className="flex justify-between">
+                            <span className="text-neutral-400">Account:</span>
+                            <span className="font-semibold text-neutral-900">{invoice.paymentDetails.accountNumber}</span>
+                          </div>
+                        )}
+                        {invoice.paymentDetails.ifsc && (
+                          <div className="flex justify-between">
+                            <span className="text-neutral-400">IFSC/Routing:</span>
+                            <span className="font-semibold text-neutral-900">{invoice.paymentDetails.ifsc}</span>
+                          </div>
+                        )}
+                        {invoice.paymentDetails.upi && (
+                          <div className="flex justify-between">
+                            <span className="text-neutral-400">UPI ID:</span>
+                            <span className="font-semibold text-neutral-900">{invoice.paymentDetails.upi}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-                    {/* Items */}
-                    {invoice.items &&
-                      Array.isArray(invoice.items) &&
-                      invoice.items.length > 0 && (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-sm">Items</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-3">
-                              {invoice.items.map((item: any, index: number) => (
-                                <div
-                                  key={index}
-                                  className="p-3 border rounded-md"
-                                >
-                                  <p className="font-medium">
-                                    {item.description}
-                                  </p>
-                                  <div className="flex justify-between text-sm text-muted-foreground mt-1">
-                                    <span>
-                                      Qty: {item.qty} ×{" "}
-                                      {invoice.currency || "INR"} {item.price}
-                                    </span>
-                                    <span className="font-medium text-foreground">
-                                      {invoice.currency || "INR"}{" "}
-                                      {item.subtotal}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                    {/* Payment Details */}
-                    {invoice.paymentDetails && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <CreditCard className="h-4 w-4" />
-                            Payment Details
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm">
-                          {invoice.paymentDetails.accountNumber && (
-                            <div>
-                              <span className="text-muted-foreground">
-                                Account:
-                              </span>{" "}
-                              {invoice.paymentDetails.accountNumber}
-                            </div>
-                          )}
-                          {invoice.paymentDetails.ifsc && (
-                            <div>
-                              <span className="text-muted-foreground">
-                                IFSC:
-                              </span>{" "}
-                              {invoice.paymentDetails.ifsc}
-                            </div>
-                          )}
-                          {invoice.paymentDetails.upi && (
-                            <div>
-                              <span className="text-muted-foreground">
-                                UPI:
-                              </span>{" "}
-                              {invoice.paymentDetails.upi}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Contact Info */}
-                    {invoice.contactInfo && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm">
-                            Contact Information
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm">
-                          {invoice.contactInfo.phone && (
-                            <div className="flex items-center gap-2">
-                              <Phone className="h-4 w-4 text-muted-foreground" />
-                              {invoice.contactInfo.phone}
-                            </div>
-                          )}
-                          {invoice.contactInfo.email && (
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-muted-foreground" />
-                              {invoice.contactInfo.email}
-                            </div>
-                          )}
-                          {invoice.contactInfo.website && (
-                            <div className="flex items-center gap-2">
-                              <Globe className="h-4 w-4 text-muted-foreground" />
+                  {/* Contact Info Card */}
+                  {invoice.contactInfo && (
+                    <Card className="rounded-2xl border-neutral-200/80 shadow-xs">
+                      <CardHeader className="p-4 pb-2 border-b border-neutral-100">
+                        <CardTitle className="text-xs font-semibold text-neutral-900 uppercase tracking-wider">
+                          Contact Channels
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-2 text-xs text-neutral-700">
+                        {invoice.contactInfo.phone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                            <span>{invoice.contactInfo.phone}</span>
+                          </div>
+                        )}
+                        {invoice.contactInfo.email && (
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                            <span className="truncate">{invoice.contactInfo.email}</span>
+                          </div>
+                        )}
+                        {invoice.contactInfo.website && (
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-3.5 w-3.5 text-neutral-400 shrink-0" />
+                            <a
+                              href={invoice.contactInfo.website.startsWith('http') ? invoice.contactInfo.website : `https://${invoice.contactInfo.website}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-neutral-900 hover:underline truncate"
+                            >
                               {invoice.contactInfo.website}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-                  </>
-                ) : null}
-              </div>
+                            </a>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Dialogs */}
+        {/* Group Management Dialogs */}
         <CreateGroupDialog
           open={createDialogOpen}
           onOpenChange={setCreateDialogOpen}

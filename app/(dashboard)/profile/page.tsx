@@ -341,14 +341,14 @@ export default function ProfilePage() {
                   <div className="space-y-1.5">
                     <Label htmlFor="name" className="text-xs font-medium">Display Name</Label>
                     {isEditing ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <Input
                           id="name"
                           value={editedName}
                           onChange={(e) => setEditedName(e.target.value)}
                           placeholder="Your Full Name"
                           disabled={updating}
-                          className="h-9 text-xs"
+                          className="h-9 text-xs flex-1"
                           autoFocus
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !updating) {
@@ -356,28 +356,31 @@ export default function ProfilePage() {
                             }
                           }}
                         />
-                        <Button
-                          size="sm"
-                          onClick={handleUpdateProfile}
-                          disabled={updating}
-                          className="h-9 text-xs gap-1.5 shrink-0 shadow-xs"
-                        >
-                          {updating ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Save className="h-3.5 w-3.5" />
-                          )}
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleCancelEdit}
-                          disabled={updating}
-                          className="h-9 text-xs shrink-0"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleUpdateProfile}
+                            disabled={updating}
+                            className="h-9 text-xs gap-1.5 flex-1 sm:flex-initial justify-center shadow-xs"
+                          >
+                            {updating ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Save className="h-3.5 w-3.5" />
+                            )}
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelEdit}
+                            disabled={updating}
+                            className="h-9 text-xs flex-1 sm:flex-initial justify-center"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            <span className="sm:hidden ml-1">Cancel</span>
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-between p-2.5 border border-border/60 rounded-xl bg-muted/20 text-xs">
@@ -398,8 +401,8 @@ export default function ProfilePage() {
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Email Address</Label>
                     <div className="flex items-center justify-between p-2.5 border border-border/60 rounded-xl bg-muted/20 text-xs">
-                      <span className="font-mono text-muted-foreground">{user.email}</span>
-                      <span className="text-[10px] text-muted-foreground/60">Primary Account</span>
+                      <span className="font-mono text-muted-foreground truncate mr-2">{user.email}</span>
+                      <span className="text-[10px] text-muted-foreground/60 shrink-0">Primary</span>
                     </div>
                   </div>
 

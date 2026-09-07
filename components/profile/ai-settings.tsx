@@ -317,38 +317,38 @@ export function AiExtractionSettings() {
 
   return (
     <Card className="border-border/60 shadow-sm overflow-hidden">
-      <CardHeader className="pb-4">
+      <CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-border/40">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="h-5 w-5 text-indigo-500" />
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+              <Sparkles className="h-4.5 w-4.5 text-indigo-500" />
               AI Extraction Settings
             </CardTitle>
-            <CardDescription className="mt-1">
+            <CardDescription className="text-xs mt-1">
               Configure Google Gemini or Groq Cloud API keys and select your preferred model for AI invoice extraction.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-muted/60 p-1 rounded-lg border border-border/40">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 w-full sm:w-auto bg-muted/60 p-1 rounded-xl border border-border/40 shrink-0">
             <Button
               type="button"
               size="sm"
               variant={isGeminiActive ? "default" : "ghost"}
               onClick={() => handleSetActiveProvider("gemini")}
-              className={`h-8 text-xs font-medium gap-1.5 transition-all ${
+              className={`h-8 text-xs font-medium gap-1.5 transition-all justify-center ${
                 isGeminiActive
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              Google Gemini
+              Gemini
             </Button>
             <Button
               type="button"
               size="sm"
               variant={isGroqActive ? "default" : "ghost"}
               onClick={() => handleSetActiveProvider("groq")}
-              className={`h-8 text-xs font-medium gap-1.5 transition-all ${
+              className={`h-8 text-xs font-medium gap-1.5 transition-all justify-center ${
                 isGroqActive
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -746,7 +746,7 @@ export function AiExtractionSettings() {
             </PopoverTrigger>
 
             <PopoverContent
-              className="w-[340px] sm:w-[420px] p-0 border border-border/80 shadow-xl bg-popover rounded-xl"
+              className="w-[calc(100vw-32px)] sm:w-[420px] max-w-[420px] p-0 border border-border/80 shadow-xl bg-popover rounded-xl"
               align="start"
             >
               {/* Search Bar */}

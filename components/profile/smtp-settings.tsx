@@ -532,7 +532,7 @@ export function SmtpSettings() {
                   id="smtpSenderName"
                   value={formConfig.senderName}
                   onChange={(e) => setFormConfig({ ...formConfig, senderName: e.target.value })}
-                  placeholder="e.g. Acme Corp Invoicing"
+                  placeholder="e.g. DevAlly Invoicing"
                   className="h-9 text-xs"
                 />
               </div>
@@ -574,12 +574,12 @@ export function SmtpSettings() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
               <Button
                 type="button"
                 size="sm"
                 onClick={handleSave}
-                className="h-9 text-xs gap-1.5 font-medium shadow-xs"
+                className="h-9 text-xs gap-1.5 font-medium shadow-xs justify-center"
               >
                 <Save className="h-3.5 w-3.5" />
                 Save Configuration
@@ -591,7 +591,7 @@ export function SmtpSettings() {
                 variant="outline"
                 onClick={handleTestConnection}
                 disabled={isTesting}
-                className="h-9 text-xs gap-1.5 shadow-xs"
+                className="h-9 text-xs gap-1.5 shadow-xs justify-center"
               >
                 {isTesting ? (
                   <>
@@ -612,7 +612,7 @@ export function SmtpSettings() {
                   size="sm"
                   variant="ghost"
                   onClick={handleCancel}
-                  className="h-9 text-xs"
+                  className="h-9 text-xs justify-center"
                 >
                   Cancel
                 </Button>

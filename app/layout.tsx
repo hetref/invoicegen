@@ -9,9 +9,9 @@ import { Toaster } from '@/components/ui/toaster'
 import Script from 'next/script'
 
 export const metadata: Metadata = {
-  title: 'Invoice Generator',
-  description: 'Generate Invoices for your business seamlessly and save it on cloud.',
-  keywords: ['invoice', 'generator', 'business', 'cloud', 'storage', 'open source'],
+  title: 'InvoiceGen — Intelligent Invoice Workspace & Data Extraction',
+  description: 'Create bespoke client invoices, extract structured data from incoming receipts using multi-model AI, and manage your financial records in a secure workspace.',
+  keywords: ['invoice generator', 'AI invoice extraction', 'Groq invoice', 'Gemini invoice', 'cloud invoices', 'business billing', 'PDF invoice'],
 }
 
 export default async function RootLayout({

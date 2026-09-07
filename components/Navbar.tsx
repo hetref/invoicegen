@@ -8,7 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { auth } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth-actions";
 import { useRouter, usePathname } from "next/navigation";
-import { Menu, Github, Star, X, AlertTriangle } from "lucide-react";
+import { 
+  Menu, 
+  Github, 
+  Star, 
+  X, 
+  AlertTriangle,
+  FileSpreadsheet,
+  LayoutDashboard,
+  User,
+  LogOut,
+  ArrowRight
+} from "lucide-react";
 
 type Session = typeof auth.$Infer.Session;
 
@@ -27,225 +38,289 @@ const Navbar = ({ session }: { session: Session | null }) => {
   const isEmailVerified = session?.user?.emailVerified;
 
   return (
-    <nav className="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo/Brand */}
+    <header className="bg-white/80 backdrop-blur-md border-b border-neutral-200/80 sticky top-0 z-50 transition-all">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-14 sm:h-16">
+          {/* Logo / Brand */}
           <div className="flex-shrink-0 flex items-center gap-3">
             <Link
               href="/"
-              className="text-xl font-bold text-gray-900 hover:text-gray-700 transition-colors"
+              className="flex items-center gap-2 group transition-opacity hover:opacity-90"
             >
-              InvoiceGen
+              <div className="w-7 h-7 rounded-lg bg-neutral-950 text-white flex items-center justify-center shadow-xs">
+                <FileSpreadsheet className="h-4 w-4" />
+              </div>
+              <span className="text-base font-semibold tracking-tight text-neutral-950">
+                InvoiceGen
+              </span>
             </Link>
-            {/* Show verification warning badge in navbar */}
+
+            {/* Email verification warning badge in navbar */}
             {session && !isEmailVerified && (
-              <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 border-yellow-200 hidden sm:flex">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                Email Not Verified
-              </Badge>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 hidden sm:inline-flex">
+                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                Email Unverified
+              </span>
             )}
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-4">
-            {/* GitHub Star Button - Always visible */}
+          <div className="hidden md:flex items-center space-x-2 lg:space-x-3">
+            {/* Landing Page Anchor Links */}
+            {!session && isLandingPage && (
+              <nav className="flex items-center space-x-1 mr-2 text-xs font-medium text-neutral-600">
+                <Link
+                  href="#features"
+                  className="px-3 py-1.5 rounded-full hover:text-neutral-950 hover:bg-neutral-100/70 transition-colors"
+                >
+                  Features
+                </Link>
+                <Link
+                  href="#use-cases"
+                  className="px-3 py-1.5 rounded-full hover:text-neutral-950 hover:bg-neutral-100/70 transition-colors"
+                >
+                  Use Cases
+                </Link>
+                <Link
+                  href="#faq"
+                  className="px-3 py-1.5 rounded-full hover:text-neutral-950 hover:bg-neutral-100/70 transition-colors"
+                >
+                  FAQ
+                </Link>
+              </nav>
+            )}
+
+            {/* GitHub Star Pill */}
             <Link href="https://github.com/hetref/invoicegen" target="_blank">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2 hover:bg-gray-100"
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-neutral-200/90 bg-neutral-50/60 hover:bg-neutral-100 text-neutral-700 text-xs font-medium transition-colors shadow-2xs"
               >
-                <Github className="h-4 w-4" />
-                <Star className="h-4 w-4" />
+                <Github className="h-3.5 w-3.5 text-neutral-800" />
+                <Star className="h-3 w-3 text-amber-500 fill-amber-500" />
                 <span className="hidden lg:inline">Star on GitHub</span>
-              </Button>
+              </button>
             </Link>
 
-            {session && (
+            {session ? (
               <>
-                {/* Only show Dashboard link if email is verified */}
+                {/* Verified user dashboard link */}
                 {isEmailVerified && (
                   <Link href="/dashboard">
                     <Button
-                      variant={pathname === "/dashboard" ? "secondary" : "ghost"}
-                      className={pathname === "/dashboard" ? "font-semibold" : "text-gray-700 hover:text-gray-900"}
+                      variant="ghost"
+                      size="sm"
+                      className={`h-8 px-3.5 rounded-full text-xs font-medium transition-all ${
+                        pathname === "/dashboard"
+                          ? "bg-neutral-100 text-neutral-950 font-semibold"
+                          : "text-neutral-600 hover:text-neutral-950 hover:bg-neutral-50"
+                      }`}
                     >
+                      <LayoutDashboard className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
                       Dashboard
                     </Button>
                   </Link>
                 )}
-                
-                {/* Always show Profile link */}
+
+                {/* Profile link */}
                 <Link href="/profile">
                   <Button
-                    variant={pathname === "/profile" ? "secondary" : "ghost"}
-                    className={pathname === "/profile" ? "font-semibold" : "text-gray-700 hover:text-gray-900"}
+                    variant="ghost"
+                    size="sm"
+                    className={`h-8 px-3.5 rounded-full text-xs font-medium transition-all ${
+                      pathname === "/profile"
+                        ? "bg-neutral-100 text-neutral-950 font-semibold"
+                        : "text-neutral-600 hover:text-neutral-950 hover:bg-neutral-50"
+                    }`}
                   >
+                    <User className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
                     Profile
                   </Button>
                 </Link>
-                
+
                 <Button
                   variant="outline"
-                  className="text-gray-700 hover:text-gray-900"
+                  size="sm"
+                  className="h-8 px-3 rounded-full border-neutral-200 text-neutral-700 hover:bg-neutral-50 text-xs font-medium gap-1.5"
                   onClick={logoutHandler}
                 >
-                  Logout
+                  <LogOut className="h-3 w-3 text-neutral-500" />
+                  <span>Logout</span>
                 </Button>
               </>
-            )}
-            {!session && (
+            ) : (
               <>
-                {isLandingPage && (
-                  <>
-                    <Link href="#features">
-                      <Button variant="ghost" className="text-gray-700 hover:text-gray-900">
-                        Features
-                      </Button>
-                    </Link>
-                    <Link href="#use-cases">
-                      <Button variant="ghost" className="text-gray-700 hover:text-gray-900">
-                        Use Cases
-                      </Button>
-                    </Link>
-                  </>
-                )}
                 <Link href="/sign-in">
                   <Button
                     variant="ghost"
-                    className="text-gray-700 hover:text-gray-900"
+                    size="sm"
+                    className="h-8 px-3 rounded-full text-xs font-medium text-neutral-600 hover:text-neutral-950 hover:bg-neutral-50"
                   >
                     Sign In
                   </Button>
                 </Link>
                 <Link href="/sign-up">
-                  <Button>Get Started</Button>
+                  <Button
+                    size="sm"
+                    className="h-8 px-4 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-medium shadow-xs transition-all"
+                  >
+                    <span>Get Started</span>
+                  </Button>
                 </Link>
               </>
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden">
+          {/* Mobile menu trigger */}
+          <div className="md:hidden flex items-center gap-2">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-6 w-6" />
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-neutral-200/80">
+                  <Menu className="h-4 w-4 text-neutral-700" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-                <div className="flex flex-col space-y-4 mt-8">
-                  {/* Logo in mobile menu */}
-                  <div className="flex items-center justify-between mb-4">
+              <SheetContent side="right" hideCloseButton className="w-[300px] sm:w-[360px] p-6 bg-[#FAFAFA] flex flex-col justify-between">
+                <div className="space-y-6">
+                  {/* Mobile Logo & Close */}
+                  <div className="flex items-center justify-between pb-4 border-b border-neutral-200">
                     <Link
                       href="/"
-                      className="text-xl font-bold text-gray-900"
+                      className="flex items-center gap-2"
                       onClick={() => setOpen(false)}
                     >
-                      InvoiceGen
+                      <div className="w-7 h-7 rounded-lg bg-neutral-950 text-white flex items-center justify-center shadow-xs">
+                        <FileSpreadsheet className="h-4 w-4" />
+                      </div>
+                      <span className="text-base font-semibold text-neutral-950">
+                        InvoiceGen
+                      </span>
                     </Link>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
+                      className="h-8 w-8 rounded-full border border-neutral-200/90 bg-white hover:bg-neutral-100 text-neutral-700 shadow-2xs"
                       onClick={() => setOpen(false)}
                     >
-                      <X className="h-5 w-5" />
+                      <X className="h-4 w-4" />
+                      <span className="sr-only">Close</span>
                     </Button>
                   </div>
 
-                  {/* Verification warning in mobile menu */}
+                  {/* Verification Notice in Mobile */}
                   {session && !isEmailVerified && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-2">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-yellow-700" />
-                        <p className="text-sm text-yellow-700 font-medium">
-                          Email Not Verified
-                        </p>
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-amber-800 font-semibold">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        <span>Email Not Verified</span>
                       </div>
-                      <p className="text-xs text-yellow-600 mt-1">
-                        Please verify your email to access all features
+                      <p className="text-amber-700 text-[11px]">
+                        Please check your inbox to access all features.
                       </p>
                     </div>
                   )}
 
-                  {/* GitHub Star Button */}
+                  {/* Navigation Links in Mobile */}
+                  <div className="space-y-1 text-sm font-medium">
+                    {session ? (
+                      <>
+                        {isEmailVerified && (
+                          <Link href="/dashboard" onClick={() => setOpen(false)}>
+                            <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-colors ${
+                              pathname === "/dashboard"
+                                ? "bg-neutral-900 text-white"
+                                : "text-neutral-700 hover:bg-neutral-100"
+                            }`}>
+                              <LayoutDashboard className="h-4 w-4" />
+                              <span>Dashboard</span>
+                            </div>
+                          </Link>
+                        )}
+                        <Link href="/profile" onClick={() => setOpen(false)}>
+                          <div className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-colors ${
+                            pathname === "/profile"
+                              ? "bg-neutral-900 text-white"
+                              : "text-neutral-700 hover:bg-neutral-100"
+                          }`}>
+                            <User className="h-4 w-4" />
+                            <span>Profile & Settings</span>
+                          </div>
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        {isLandingPage && (
+                          <>
+                            <Link href="#features" onClick={() => setOpen(false)}>
+                              <div className="px-3 py-2 rounded-xl text-neutral-700 hover:bg-neutral-100 transition-colors">
+                                Features
+                              </div>
+                            </Link>
+                            <Link href="#use-cases" onClick={() => setOpen(false)}>
+                              <div className="px-3 py-2 rounded-xl text-neutral-700 hover:bg-neutral-100 transition-colors">
+                                Use Cases
+                              </div>
+                            </Link>
+                            <Link href="#faq" onClick={() => setOpen(false)}>
+                              <div className="px-3 py-2 rounded-xl text-neutral-700 hover:bg-neutral-100 transition-colors">
+                                FAQ
+                              </div>
+                            </Link>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom Actions in Mobile */}
+                <div className="space-y-3 pt-6 border-t border-neutral-200">
                   <Link
                     href="https://github.com/hetref/invoicegen"
                     target="_blank"
                     onClick={() => setOpen(false)}
+                    className="w-full"
                   >
                     <Button
                       variant="outline"
-                      className="w-full gap-2 justify-start"
+                      size="sm"
+                      className="w-full h-9 rounded-xl border-neutral-200 text-neutral-800 text-xs font-medium justify-center gap-2"
                     >
                       <Github className="h-4 w-4" />
-                      <Star className="h-4 w-4" />
-                      Star on GitHub
+                      <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      <span>Star on GitHub</span>
                     </Button>
                   </Link>
 
-                  {session && (
-                    <>
-                      {/* Only show Dashboard in mobile if verified */}
-                      {isEmailVerified && (
-                        <Link href="/dashboard" onClick={() => setOpen(false)}>
-                          <Button
-                            variant={pathname === "/dashboard" ? "secondary" : "ghost"}
-                            className="w-full justify-start text-left"
-                          >
-                            Dashboard
-                          </Button>
-                        </Link>
-                      )}
-                      
-                      {/* Always show Profile */}
-                      <Link href="/profile" onClick={() => setOpen(false)}>
-                        <Button
-                          variant={pathname === "/profile" ? "secondary" : "ghost"}
-                          className="w-full justify-start text-left"
-                        >
-                          Profile
-                        </Button>
-                      </Link>
-                      
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left"
-                        onClick={logoutHandler}
-                      >
-                        Logout
-                      </Button>
-                    </>
-                  )}
-                  {!session && (
-                    <>
-                      {isLandingPage && (
-                        <>
-                          <Link href="#features" onClick={() => setOpen(false)}>
-                            <Button variant="ghost" className="w-full justify-start">
-                              Features
-                            </Button>
-                          </Link>
-                          <Link href="#use-cases" onClick={() => setOpen(false)}>
-                            <Button variant="ghost" className="w-full justify-start">
-                              Use Cases
-                            </Button>
-                          </Link>
-                        </>
-                      )}
+                  {session ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full h-9 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 hover:text-rose-700 justify-center gap-1.5"
+                      onClick={logoutHandler}
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      <span>Log Out</span>
+                    </Button>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
                       <Link href="/sign-in" onClick={() => setOpen(false)}>
                         <Button
-                          variant="ghost"
-                          className="w-full justify-start text-left"
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-9 rounded-xl border-neutral-200 text-xs font-medium"
                         >
                           Sign In
                         </Button>
                       </Link>
                       <Link href="/sign-up" onClick={() => setOpen(false)}>
-                        <Button className="w-full">Get Started</Button>
+                        <Button
+                          size="sm"
+                          className="w-full h-9 rounded-xl bg-neutral-950 text-white text-xs font-medium"
+                        >
+                          Get Started
+                        </Button>
                       </Link>
-                    </>
+                    </div>
                   )}
                 </div>
               </SheetContent>
@@ -253,7 +328,7 @@ const Navbar = ({ session }: { session: Session | null }) => {
           </div>
         </div>
       </div>
-    </nav>
+    </header>
   );
 };
 
