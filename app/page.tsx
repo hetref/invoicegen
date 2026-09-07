@@ -104,7 +104,7 @@ export default function LandingPage() {
                 </div>
                 <CardTitle>AI Extraction</CardTitle>
                 <CardDescription>
-                  Automatically extract invoice data using Gemini AI. Get 1 free extraction or unlimited with your own API key.
+                  Automatically extract invoice data using Google Gemini or Groq LPU AI. Get 1 free extraction or unlimited with your own API key.
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -294,7 +294,7 @@ export default function LandingPage() {
               { name: 'TypeScript', icon: '📘' },
               { name: 'PostgreSQL', icon: '🐘' },
               { name: 'Cloudflare R2', icon: '☁️' },
-              { name: 'Gemini AI', icon: '🤖' },
+              { name: 'Gemini & Groq AI', icon: '⚡' },
               { name: 'Prisma ORM', icon: '🔷' },
             ].map((tech) => (
               <Card key={tech.name} className="text-center hover:shadow-md transition-shadow">

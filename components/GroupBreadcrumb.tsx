@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Home } from "lucide-react";
+import { ChevronRight, Folder, Home, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Group } from "./GroupTree";
 
@@ -25,7 +25,7 @@ export function GroupBreadcrumb({
     while (currentId) {
       const group = groups.find((g) => g.id === currentId);
       if (!group) break;
-      
+
       path.unshift(group);
       currentId = group.parentId;
     }
@@ -36,30 +36,38 @@ export function GroupBreadcrumb({
   const path = buildPath(currentGroupId);
 
   return (
-    <div className="flex items-center gap-1 text-sm text-muted-foreground py-2 overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/40">
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs text-muted-foreground py-1 overflow-x-auto no-scrollbar">
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 px-2 hover:text-foreground flex-shrink-0"
+        className="h-7 px-2 gap-1.5 text-xs font-medium hover:text-foreground shrink-0 rounded-md"
         onClick={() => onGroupSelect(null)}
       >
-        <Home className="h-4 w-4" />
+        <Home className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className={currentGroupId === null ? "text-foreground font-semibold" : ""}>
+          All Invoices
+        </span>
       </Button>
 
-      {path.map((group) => (
-        <div key={group.id} className="flex items-center gap-1 flex-shrink-0">
-          <ChevronRight className="h-4 w-4" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 hover:text-foreground whitespace-nowrap"
-            onClick={() => onGroupSelect(group.id)}
-          >
-            {group.name}
-          </Button>
-        </div>
-      ))}
-    </div>
+      {path.map((group, index) => {
+        const isLast = index === path.length - 1;
+        return (
+          <div key={group.id} className="flex items-center gap-1 shrink-0">
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-7 px-2 gap-1.5 text-xs font-medium hover:text-foreground whitespace-nowrap rounded-md ${
+                isLast ? "text-foreground font-semibold bg-muted/40" : ""
+              }`}
+              onClick={() => onGroupSelect(group.id)}
+            >
+              <Folder className={`h-3.5 w-3.5 ${isLast ? "text-primary" : "text-amber-500/80"}`} />
+              <span>{group.name}</span>
+            </Button>
+          </div>
+        );
+      })}
+    </nav>
   );
 }
-

@@ -3,7 +3,8 @@
 import { useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Upload, FileText, X, Loader2, CloudUpload, CheckCircle2, AlertCircle, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -21,7 +22,12 @@ interface InvoiceUploadProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpenChange }: InvoiceUploadProps) {
+export function InvoiceUpload({
+  onUploadComplete,
+  currentGroupId,
+  isOpen,
+  onOpenChange,
+}: InvoiceUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -48,11 +54,11 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
       "image/jpg",
       "image/webp",
     ];
-    
+
     if (!allowedTypes.includes(file.type)) {
       toast({
-        title: "Invalid file type",
-        description: "Please upload a PDF or image file (PNG, JPEG, WebP)",
+        title: "Unsupported File Type",
+        description: "Please select a PDF document or image file (PNG, JPEG, WebP).",
         variant: "destructive",
       });
       return false;
@@ -61,8 +67,8 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
     const maxSize = 20 * 1024 * 1024; // 20MB
     if (file.size > maxSize) {
       toast({
-        title: "File too large",
-        description: "Please upload a file smaller than 20MB",
+        title: "File Too Large",
+        description: "Maximum file size is 20 MB.",
         variant: "destructive",
       });
       return false;
@@ -75,7 +81,7 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
     if (!validateFile(file)) return;
 
     setSelectedFile(file);
-    
+
     // Create preview URL
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
@@ -124,7 +130,7 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
         if (uploadResponse.status === 413) {
           toast({
             title: "Storage Limit Exceeded",
-            description: errorData.message || "You have reached your storage limit of 40 MB.",
+            description: errorData.message || "You have reached your storage limit.",
             variant: "destructive",
           });
           return;
@@ -144,7 +150,7 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        throw new Error("Failed to upload file to storage");
       }
 
       // Step 3: Save invoice metadata
@@ -162,12 +168,12 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
       });
 
       if (!metadataResponse.ok) {
-        throw new Error("Failed to save invoice metadata");
+        throw new Error("Failed to save invoice record");
       }
 
       toast({
-        title: "Success!",
-        description: "Invoice uploaded successfully",
+        title: "Upload Completed",
+        description: `Successfully uploaded ${selectedFile.name}`,
       });
 
       // Reset state
@@ -180,14 +186,14 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
 
       // Notify parent component
       onUploadComplete?.();
-      
+
       // Close the upload card after successful upload
       onOpenChange(false);
     } catch (error) {
       console.error("Upload error:", error);
       toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "An error occurred",
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "An error occurred during upload",
         variant: "destructive",
       });
     } finally {
@@ -207,34 +213,43 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <>
-      <div
-        className={`transition-all duration-300 ease-in-out overflow-hidden ${
-          isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
+      <div className="animate-in fade-in-50 slide-in-from-top-3 duration-200">
         <Card
-          className={`border-2 border-dashed transition-colors ${
+          className={`border-2 border-dashed transition-all relative overflow-hidden ${
             isDragging
-              ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-muted-foreground/50"
+              ? "border-primary bg-primary/5 shadow-md scale-[1.005]"
+              : "border-border/80 hover:border-primary/50 bg-card/60"
           }`}
           onDragEnter={handleDrag}
           onDragOver={handleDrag}
           onDragLeave={handleDrag}
           onDrop={handleDrop}
         >
-          <CardContent className="flex flex-col items-center justify-center py-10">
-            <div className="rounded-full bg-primary/10 p-4 mb-4">
-              <Upload className="h-8 w-8 text-primary" />
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="absolute top-3 right-3 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+            title="Close upload panel"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <CardContent className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <div className="p-3.5 rounded-2xl bg-primary/10 text-primary mb-3.5 ring-8 ring-primary/5">
+              <CloudUpload className="h-7 w-7" />
             </div>
-            
-            <h3 className="text-lg font-semibold mb-2">Upload Invoice</h3>
-            <p className="text-sm text-muted-foreground mb-4 text-center">
-              Drag and drop your invoice file here, or click to browse
+
+            <h3 className="text-base font-semibold tracking-tight mb-1">
+              Upload Invoices
+            </h3>
+            <p className="text-xs text-muted-foreground max-w-sm mb-4">
+              Drag and drop your PDF or image invoice here, or click to browse from your device.
             </p>
-            
+
             <input
               ref={fileInputRef}
               type="file"
@@ -242,59 +257,74 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
               accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
               onChange={handleFileInput}
             />
-            
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              variant="outline"
-              className="gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              Browse Files
-            </Button>
-            
-            <p className="text-xs text-muted-foreground mt-4">
-              Supported formats: PDF, PNG, JPEG, WebP (Max 20MB)
-            </p>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              className="mt-4"
-            >
-              Cancel
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                size="sm"
+                className="gap-2 text-xs font-medium h-9 shadow-xs"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Browse Files
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                className="text-xs h-9"
+              >
+                Cancel
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-1.5 mt-5">
+              <span className="text-[11px] text-muted-foreground mr-1">Accepted:</span>
+              <Badge variant="secondary" className="text-[10px] font-mono font-normal">PDF</Badge>
+              <Badge variant="secondary" className="text-[10px] font-mono font-normal">PNG</Badge>
+              <Badge variant="secondary" className="text-[10px] font-mono font-normal">JPG</Badge>
+              <Badge variant="secondary" className="text-[10px] font-mono font-normal">WebP</Badge>
+              <span className="text-[11px] text-muted-foreground ml-1">(Up to 20MB)</span>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>Preview Invoice</DialogTitle>
-            <DialogDescription>
-              Review your invoice before uploading
-            </DialogDescription>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-base">Upload Invoice Confirmation</DialogTitle>
+                <DialogDescription className="text-xs mt-0.5">
+                  Review invoice file details before uploading to secure storage
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="my-4">
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
             {selectedFile && (
-              <div className="mb-4 p-3 bg-muted rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="font-medium text-sm">{selectedFile.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+              <div className="p-3 rounded-xl border bg-muted/40 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-xs sm:text-sm truncate">{selectedFile.name}</p>
+                    <p className="text-[11px] text-muted-foreground font-mono">
+                      {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedFile.type || "Document"}
                     </p>
                   </div>
                 </div>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
                   onClick={handleCancel}
                   disabled={isUploading}
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -302,40 +332,50 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
             )}
 
             {previewUrl && selectedFile && (
-              <div className="border rounded-lg overflow-hidden bg-muted/50">
+              <div className="border rounded-xl overflow-hidden bg-muted/20 flex items-center justify-center max-h-[420px]">
                 {selectedFile.type === "application/pdf" ? (
                   <iframe
                     src={previewUrl}
-                    className="w-full h-[500px]"
+                    className="w-full h-[400px] border-0"
                     title="Invoice Preview"
                   />
                 ) : (
                   <img
                     src={previewUrl}
                     alt="Invoice Preview"
-                    className="w-full h-auto max-h-[500px] object-contain"
+                    className="w-full h-auto max-h-[400px] object-contain p-2"
                   />
                 )}
               </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="p-4 border-t bg-muted/20 shrink-0 gap-2 sm:gap-0">
             <Button
               variant="outline"
+              size="sm"
               onClick={handleCancel}
               disabled={isUploading}
+              className="text-xs h-9"
             >
               Cancel
             </Button>
-            <Button onClick={handleUpload} disabled={isUploading}>
+            <Button
+              size="sm"
+              onClick={handleUpload}
+              disabled={isUploading}
+              className="text-xs h-9 gap-1.5 font-medium"
+            >
               {isUploading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Uploading...
                 </>
               ) : (
-                "Confirm & Upload"
+                <>
+                  <CloudUpload className="h-3.5 w-3.5" />
+                  Confirm & Upload
+                </>
               )}
             </Button>
           </DialogFooter>
@@ -344,4 +384,3 @@ export function InvoiceUpload({ onUploadComplete, currentGroupId, isOpen, onOpen
     </>
   );
 }
-

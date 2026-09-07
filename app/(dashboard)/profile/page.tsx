@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Loader2,
@@ -24,15 +23,15 @@ import {
   X,
   TrendingUp,
   ArrowLeft,
-  Key,
-  Trash2,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { AiExtractionSettings } from "@/components/profile/ai-settings";
+import { SmtpSettings } from "@/components/profile/smtp-settings";
 
 interface UserProfile {
   id: string;
@@ -43,11 +42,18 @@ interface UserProfile {
   createdAt: string;
   lastLoginMethod: string | null;
   hasUsedFreeExtraction: boolean;
+  storageLimit?: number;
+  maxInvoices?: number | null;
+  role?: string;
 }
 
 interface ProfileStats {
   totalInvoices: number;
   totalSize: number;
+  storageLimit: number;
+  remainingStorage: number;
+  percentUsed: string;
+  maxInvoices?: number | null;
   uploadedInvoices: number;
   createdInvoices: number;
   invoicesThisMonth: number;
@@ -61,36 +67,12 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [editedName, setEditedName] = useState("");
-  const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [isEditingApiKey, setIsEditingApiKey] = useState(false);
-  const [currentAiModel, setCurrentAiModel] = useState("gemini-2.5-flash");
-  const [smtpSettings, setSmtpSettings] = useState({
-    host: "",
-    port: "587",
-    user: "",
-    password: "",
-    mailFrom: "",
-    senderName: "",
-    replyTo: "",
-    secure: false,
-  });
-  const [isEditingSmtp, setIsEditingSmtp] = useState(false);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
-  const { toast} = useToast();
+  const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
     fetchProfile();
-    // Load Gemini API key from localStorage
-    const savedApiKey = localStorage.getItem("gemini_api_key");
-    if (savedApiKey) {
-      setGeminiApiKey(savedApiKey);
-    }
-    // Load SMTP settings from localStorage
-    const savedSmtp = localStorage.getItem("custom_smtp_settings");
-    if (savedSmtp) {
-      setSmtpSettings(JSON.parse(savedSmtp));
-    }
   }, []);
 
   const fetchProfile = async () => {
@@ -107,7 +89,7 @@ export default function ProfilePage() {
       console.error("Error fetching profile:", error);
       toast({
         title: "Error",
-        description: "Failed to load profile",
+        description: "Failed to load profile data",
         variant: "destructive",
       });
     } finally {
@@ -118,7 +100,7 @@ export default function ProfilePage() {
   const handleUpdateProfile = async () => {
     if (!editedName.trim()) {
       toast({
-        title: "Error",
+        title: "Validation Error",
         description: "Name cannot be empty",
         variant: "destructive",
       });
@@ -130,7 +112,7 @@ export default function ProfilePage() {
       const response = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editedName }),
+        body: JSON.stringify({ name: editedName.trim() }),
       });
 
       if (!response.ok) throw new Error("Failed to update profile");
@@ -140,14 +122,14 @@ export default function ProfilePage() {
       setIsEditing(false);
 
       toast({
-        title: "Success",
-        description: "Profile updated successfully",
+        title: "Profile Updated",
+        description: "Your display name has been updated.",
       });
     } catch (error) {
       console.error("Error updating profile:", error);
       toast({
-        title: "Error",
-        description: "Failed to update profile",
+        title: "Update Failed",
+        description: "Could not save profile changes",
         variant: "destructive",
       });
     } finally {
@@ -160,106 +142,14 @@ export default function ProfilePage() {
     setIsEditing(false);
   };
 
-  const handleSaveApiKey = () => {
-    if (!geminiApiKey.trim()) {
-      toast({
-        title: "Error",
-        description: "API key cannot be empty",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Save to localStorage
-    localStorage.setItem("gemini_api_key", geminiApiKey.trim());
-    setIsEditingApiKey(false);
-    
-    toast({
-      title: "Success",
-      description: "Gemini API key saved successfully",
-    });
-  };
-
-  const handleCancelApiKeyEdit = () => {
-    const savedApiKey = localStorage.getItem("gemini_api_key");
-    setGeminiApiKey(savedApiKey || "");
-    setIsEditingApiKey(false);
-  };
-
-  const handleDeleteApiKey = () => {
-    localStorage.removeItem("gemini_api_key");
-    setGeminiApiKey("");
-    toast({
-      title: "Success",
-      description: "Gemini API key removed",
-    });
-  };
-
-  const handleSaveSmtp = () => {
-    if (!smtpSettings.host || !smtpSettings.user || !smtpSettings.password || !smtpSettings.mailFrom) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required SMTP fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Save to localStorage
-    localStorage.setItem("custom_smtp_settings", JSON.stringify(smtpSettings));
-    setIsEditingSmtp(false);
-    
-    toast({
-      title: "Success",
-      description: "Custom SMTP settings saved successfully",
-    });
-  };
-
-  const handleCancelSmtpEdit = () => {
-    const savedSmtp = localStorage.getItem("custom_smtp_settings");
-    if (savedSmtp) {
-      setSmtpSettings(JSON.parse(savedSmtp));
-    } else {
-      setSmtpSettings({
-        host: "",
-        port: "587",
-        user: "",
-        password: "",
-        mailFrom: "",
-        senderName: "",
-        replyTo: "",
-        secure: false,
-      });
-    }
-    setIsEditingSmtp(false);
-  };
-
-  const handleDeleteSmtp = () => {
-    localStorage.removeItem("custom_smtp_settings");
-    setSmtpSettings({
-      host: "",
-      port: "587",
-      user: "",
-      password: "",
-      mailFrom: "",
-      senderName: "",
-      replyTo: "",
-      secure: false,
-    });
-    toast({
-      title: "Success",
-      description: "Custom SMTP settings removed",
-    });
-  };
-
   const handleResendVerification = async () => {
     if (!user?.email) return;
-    
+
     setIsResendingVerification(true);
     try {
       const { sendVerificationEmail } = await import("@/lib/actions/auth-actions");
       const result = await sendVerificationEmail(user.email);
-      
+
       if (result.success) {
         toast({
           title: "Verification Email Sent",
@@ -272,10 +162,10 @@ export default function ProfilePage() {
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
-        description: "An error occurred. Please try again.",
+        description: "An error occurred while sending verification email.",
         variant: "destructive",
       });
     } finally {
@@ -284,16 +174,17 @@ export default function ProfilePage() {
   };
 
   const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return "0 Bytes";
+    if (!bytes || bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
   };
 
   const getInitials = (name: string): string => {
     return name
       .split(" ")
+      .filter(Boolean)
       .map((n) => n[0])
       .join("")
       .toUpperCase()
@@ -303,634 +194,372 @@ export default function ProfilePage() {
   const formatDate = (dateString: string): string => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
-      month: "long",
+      month: "short",
       day: "numeric",
     });
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-2 text-muted-foreground">
+        <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        <span className="text-xs">Loading profile data...</span>
       </div>
     );
   }
 
   if (!user || !stats) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">Failed to load profile</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <p className="text-sm">Failed to load account profile</p>
+        <Button size="sm" variant="outline" onClick={fetchProfile} className="text-xs">
+          Try Again
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        {/* Top Header Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border/40">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Account & Preferences</h1>
+              <Badge variant="secondary" className="text-[11px] font-mono px-2 py-0.5">
+                {user.role || "User"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Manage your personal credentials, storage limits, AI providers, and email delivery.
+            </p>
+          </div>
+
           {user.emailVerified && (
             <Button
-              variant="ghost"
+              variant="outline"
+              size="sm"
               onClick={() => router.push("/dashboard")}
-              className="gap-2 mb-4"
+              className="h-8 text-xs gap-1.5 self-start sm:self-auto shadow-xs"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
               Back to Dashboard
             </Button>
           )}
-          <h1 className="text-3xl font-bold">Profile</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your account settings and view your statistics
-          </p>
         </div>
 
         {/* Email Verification Warning for Unverified Users */}
         {!user.emailVerified && (
-          <Alert className="mb-6 bg-yellow-50 border-yellow-200">
-            <AlertCircle className="h-5 w-5 text-yellow-600" />
-            <AlertDescription className="ml-2">
-              <div className="space-y-2">
-                <p className="font-semibold text-yellow-900">
-                  Email Verification Required
-                </p>
-                <p className="text-sm text-yellow-700">
-                  You must verify your email address to access dashboard features. 
-                  Please check your inbox for the verification email or click the button below to resend it.
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleResendVerification}
-                  disabled={isResendingVerification}
-                  className="mt-2 border-yellow-300 text-yellow-700 hover:bg-yellow-100"
-                >
-                  {isResendingVerification ? (
-                    <>
-                      <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Mail className="h-3 w-3 mr-2" />
-                      Resend Verification Email
-                    </>
-                  )}
-                </Button>
-              </div>
+          <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <AlertDescription className="ml-2 space-y-2">
+              <p className="font-semibold text-xs">Email Verification Required</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Please verify your email address to unlock full invoice management and cloud features.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleResendVerification}
+                disabled={isResendingVerification}
+                className="h-7 text-xs border-amber-500/30 bg-background hover:bg-muted"
+              >
+                {isResendingVerification ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                    Sending Email...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-3 w-3 mr-1.5" />
+                    Resend Verification Link
+                  </>
+                )}
+              </Button>
             </AlertDescription>
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Profile Information */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Left Column: Personal Information & Settings (2 cols) */}
           <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Personal Information</CardTitle>
-                <CardDescription>
-                  Update your personal details and account information
-                </CardDescription>
+            {/* Personal Details Card */}
+            <Card className="border-border/60 shadow-xs">
+              <CardHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-border/40">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold">Personal Information</CardTitle>
+                    <CardDescription className="text-xs">
+                      Update your account name and review profile identity
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Avatar Section */}
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-24 w-24">
+
+              <CardContent className="p-4 sm:p-6 space-y-5">
+                {/* Avatar and Identity */}
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16 border-2 border-border">
                     <AvatarImage src={user.image || undefined} alt={user.name} />
-                    <AvatarFallback className="text-2xl">
+                    <AvatarFallback className="text-base font-semibold bg-muted text-foreground">
                       {getInitials(user.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1">
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Profile Picture
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {user.image ? "Using custom avatar" : "Using default avatar"}
-                    </p>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Name Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <Input
-                        id="name"
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        placeholder="Enter your name"
-                        disabled={updating}
-                      />
-                      <Button
-                        size="icon"
-                        onClick={handleUpdateProfile}
-                        disabled={updating}
-                      >
-                        {updating ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={handleCancelEdit}
-                        disabled={updating}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span>{user.name}</span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setIsEditing(true)}
-                        className="gap-2"
-                      >
-                        <PenSquare className="h-3 w-3" />
-                        Edit
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Email Field */}
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span>{user.email}</span>
-                    </div>
-                    {user.emailVerified ? (
-                      <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Verified
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        Not Verified
-                      </Badge>
-                    )}
-                  </div>
-                  {!user.emailVerified && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-muted-foreground">
-                        Please verify your email to access all features
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleResendVerification}
-                        disabled={isResendingVerification}
-                        className="text-xs h-7"
-                      >
-                        {isResendingVerification ? (
-                          <>
-                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          "Resend Verification"
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                  {user.emailVerified && (
-                    <p className="text-xs text-muted-foreground">
-                      Email cannot be changed
-                    </p>
-                  )}
-                </div>
-
-                {/* Account Created */}
-                <div className="space-y-2">
-                  <Label>Member Since</Label>
-                  <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{formatDate(user.createdAt)}</span>
-                  </div>
-                </div>
-
-                {/* Login Method */}
-                {user.lastLoginMethod && (
-                  <div className="space-y-2">
-                    <Label>Login Method</Label>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="capitalize">
-                        {user.lastLoginMethod}
-                      </Badge>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Gemini API Key Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5" />
-                  AI Extraction Settings
-                </CardTitle>
-                <CardDescription>
-                  Manage your Gemini API key for unlimited AI invoice extractions
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* API Key Input */}
-                <div className="space-y-2">
-                  <Label htmlFor="apiKey">Gemini API Key</Label>
-                  {isEditingApiKey || !geminiApiKey ? (
-                    <div className="space-y-2">
-                      <Input
-                        id="apiKey"
-                        type="password"
-                        value={geminiApiKey}
-                        onChange={(e) => setGeminiApiKey(e.target.value)}
-                        placeholder="Enter your Gemini API key"
-                        disabled={updating}
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={handleSaveApiKey}
-                          disabled={updating || !geminiApiKey.trim()}
-                          className="gap-2"
+                  <div className="space-y-1">
+                    <h3 className="font-semibold text-sm text-foreground">{user.name}</h3>
+                    <p className="text-xs text-muted-foreground font-mono">{user.email}</p>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      {user.emailVerified ? (
+                        <Badge
+                          variant="secondary"
+                          className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] px-1.5 py-0"
                         >
-                          <Save className="h-3 w-3" />
-                          Save
-                        </Button>
-                        {geminiApiKey && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleCancelApiKeyEdit}
-                            disabled={updating}
-                          >
-                            Cancel
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
-                      <div className="flex items-center gap-2">
-                        <Key className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">••••••••••••••••</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setIsEditingApiKey(true)}
-                          className="gap-2"
-                        >
-                          <PenSquare className="h-3 w-3" />
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleDeleteApiKey}
-                          className="gap-2 text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    {geminiApiKey 
-                      ? "Your API key is saved locally and enables unlimited AI extractions" 
-                      : "Without an API key, you get 1 free AI extraction"}
-                  </p>
-                </div>
-
-                <Separator />
-
-                {/* AI Model Display */}
-                <div className="space-y-2">
-                  <Label>AI Model</Label>
-                  <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
-                    <Sparkles className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-mono">{currentAiModel}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    This model is used for extracting invoice data
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Custom SMTP Settings Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Mail className="h-5 w-5" />
-                  Custom SMTP Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure your own SMTP server for sending invoices via email
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {isEditingSmtp || !smtpSettings.host ? (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpHost">SMTP Host *</Label>
-                      <Input
-                        id="smtpHost"
-                        type="text"
-                        value={smtpSettings.host}
-                        onChange={(e) =>
-                          setSmtpSettings({ ...smtpSettings, host: e.target.value })
-                        }
-                        placeholder="smtp.example.com"
-                        disabled={updating}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="smtpPort">Port *</Label>
-                        <Input
-                          id="smtpPort"
-                          type="text"
-                          value={smtpSettings.port}
-                          onChange={(e) =>
-                            setSmtpSettings({ ...smtpSettings, port: e.target.value })
-                          }
-                          placeholder="587"
-                          disabled={updating}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={smtpSettings.secure}
-                            onChange={(e) =>
-                              setSmtpSettings({ ...smtpSettings, secure: e.target.checked })
-                            }
-                            disabled={updating}
-                          />
-                          Use SSL/TLS
-                        </Label>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpUser">SMTP Username/Email *</Label>
-                      <Input
-                        id="smtpUser"
-                        type="text"
-                        value={smtpSettings.user}
-                        onChange={(e) =>
-                          setSmtpSettings({ ...smtpSettings, user: e.target.value })
-                        }
-                        placeholder="your-email@example.com"
-                        disabled={updating}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpPassword">SMTP Password *</Label>
-                      <Input
-                        id="smtpPassword"
-                        type="password"
-                        value={smtpSettings.password}
-                        onChange={(e) =>
-                          setSmtpSettings({ ...smtpSettings, password: e.target.value })
-                        }
-                        placeholder="••••••••"
-                        disabled={updating}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpMailFrom">Mail From Address *</Label>
-                      <Input
-                        id="smtpMailFrom"
-                        type="email"
-                        value={smtpSettings.mailFrom}
-                        onChange={(e) =>
-                          setSmtpSettings({ ...smtpSettings, mailFrom: e.target.value })
-                        }
-                        placeholder="noreply@yourdomain.com"
-                        disabled={updating}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        The email address that will appear as the sender
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpSenderName">Sender Display Name (Optional)</Label>
-                      <Input
-                        id="smtpSenderName"
-                        type="text"
-                        value={smtpSettings.senderName}
-                        onChange={(e) =>
-                          setSmtpSettings({ ...smtpSettings, senderName: e.target.value })
-                        }
-                        placeholder="Your Company Name"
-                        disabled={updating}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        The name that will appear as the sender (e.g., "Company Name &lt;email@address&gt;")
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="smtpReplyTo">Reply-To Email (Optional)</Label>
-                      <Input
-                        id="smtpReplyTo"
-                        type="email"
-                        value={smtpSettings.replyTo}
-                        onChange={(e) =>
-                          setSmtpSettings({ ...smtpSettings, replyTo: e.target.value })
-                        }
-                        placeholder="replies@yourdomain.com"
-                        disabled={updating}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Where replies should be sent (can differ from sender address)
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={handleSaveSmtp}
-                        disabled={updating}
-                        className="gap-2"
-                      >
-                        <Save className="h-3 w-3" />
-                        Save
-                      </Button>
-                      {smtpSettings.host && (
-                        <Button
-                          size="sm"
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Verified
+                        </Badge>
+                      ) : (
+                        <Badge
                           variant="outline"
-                          onClick={handleCancelSmtpEdit}
-                          disabled={updating}
+                          className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0"
                         >
-                          Cancel
-                        </Button>
+                          Unverified
+                        </Badge>
                       )}
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border rounded-md bg-muted/50">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">{smtpSettings.host}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {smtpSettings.user} • Port {smtpSettings.port}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          From: {smtpSettings.senderName ? `${smtpSettings.senderName} <${smtpSettings.mailFrom}>` : smtpSettings.mailFrom}
-                        </p>
-                        {smtpSettings.replyTo && (
-                          <p className="text-xs text-muted-foreground">
-                            Reply-To: {smtpSettings.replyTo}
-                          </p>
-                        )}
+                </div>
+
+                <Separator className="border-border/40" />
+
+                {/* Name & Email Fields */}
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name" className="text-xs font-medium">Display Name</Label>
+                    {isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="name"
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          placeholder="Your Full Name"
+                          disabled={updating}
+                          className="h-9 text-xs"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !updating) {
+                              handleUpdateProfile();
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleUpdateProfile}
+                          disabled={updating}
+                          className="h-9 text-xs gap-1.5 shrink-0 shadow-xs"
+                        >
+                          {updating ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Save className="h-3.5 w-3.5" />
+                          )}
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCancelEdit}
+                          disabled={updating}
+                          className="h-9 text-xs shrink-0"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
-                      <div className="flex gap-2">
+                    ) : (
+                      <div className="flex items-center justify-between p-2.5 border border-border/60 rounded-xl bg-muted/20 text-xs">
+                        <span className="font-medium text-foreground">{user.name}</span>
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setIsEditingSmtp(true)}
-                          className="gap-2"
+                          onClick={() => setIsEditing(true)}
+                          className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
                         >
                           <PenSquare className="h-3 w-3" />
                           Edit
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleDeleteSmtp}
-                          className="gap-2 text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
                       </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Your custom SMTP settings will be used for sending invoices via email
-                    </p>
+                    )}
                   </div>
-                )}
-                <Separator />
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>💡 <strong>Note:</strong> Without custom SMTP settings, the default Gmail SMTP will be used (if configured).</p>
-                  <p><strong>Common SMTP Ports:</strong> 587 (TLS), 465 (SSL), 25 (Non-secure)</p>
-                  <p><strong>Mail From:</strong> This is the email address that will appear as the sender. It may differ from your SMTP username depending on your email provider's configuration.</p>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Email Address</Label>
+                    <div className="flex items-center justify-between p-2.5 border border-border/60 rounded-xl bg-muted/20 text-xs">
+                      <span className="font-mono text-muted-foreground">{user.email}</span>
+                      <span className="text-[10px] text-muted-foreground/60">Primary Account</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="p-3 border border-border/60 rounded-xl bg-muted/10 space-y-1">
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Member Since
+                      </span>
+                      <span className="font-mono text-xs font-medium text-foreground">
+                        {formatDate(user.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className="p-3 border border-border/60 rounded-xl bg-muted/10 space-y-1">
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                        Authentication Method
+                      </span>
+                      <span className="text-xs font-medium capitalize text-foreground">
+                        {user.lastLoginMethod || "Email & Password"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* AI Intelligence Provider & Model Selector */}
+            <AiExtractionSettings />
+
+            {/* Email Delivery (Custom SMTP) Settings */}
+            <SmtpSettings />
           </div>
 
-          {/* Statistics Sidebar */}
+          {/* Right Column: Storage & Metrics Sidebar (1 col) */}
           <div className="space-y-6">
-            {/* Storage Usage */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <HardDrive className="h-5 w-5" />
-                  Storage Usage
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center mb-4">
-                  <p className="text-3xl font-bold">{formatBytes(stats.totalSize)}</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Total Storage Used
-                  </p>
+            {/* Storage Quota Card */}
+            <Card className="border-border/60 shadow-xs">
+              <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/40">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                    <HardDrive className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm font-semibold">Storage & Quota</CardTitle>
+                    <CardDescription className="text-[11px]">
+                      Cloud storage consumption
+                    </CardDescription>
+                  </div>
                 </div>
-                
-                {/* Visual storage representation */}
-                <div className="space-y-2 mb-4">
-                  <Progress 
-                    value={stats.totalSize > 0 ? Math.min((stats.totalSize / (40 * 1024 * 1024)) * 100, 100) : 0} 
-                    className="h-2"
-                  />
-                  <p className="text-xs text-muted-foreground text-center">
-                    {stats.totalSize > 0 
-                      ? `${((stats.totalSize / (40 * 1024 * 1024)) * 100).toFixed(1)}% of 40 MB`
-                      : "No storage used yet"}
-                  </p>
+              </CardHeader>
+
+              <CardContent className="p-4 sm:p-5 space-y-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-bold font-mono tracking-tight tabular-nums">
+                      {formatBytes(stats.totalSize)}
+                    </span>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      of {formatBytes(stats.storageLimit || 41943040)} ({stats.percentUsed}%)
+                    </span>
+                  </div>
+
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        parseFloat(stats.percentUsed) >= 90
+                          ? "bg-destructive"
+                          : parseFloat(stats.percentUsed) >= 70
+                          ? "bg-amber-500"
+                          : "bg-primary"
+                      }`}
+                      style={{ width: `${Math.min(100, Math.max(0, parseFloat(stats.percentUsed)))}%` }}
+                    />
+                  </div>
                 </div>
 
-                <Separator className="my-4" />
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Average per invoice</span>
-                    <span className="font-medium">
+                <Separator className="border-border/40" />
+
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Allocated Limit</span>
+                    <span className="font-mono font-medium text-foreground">
+                      {formatBytes(stats.storageLimit || 41943040)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Available Space</span>
+                    <span className="font-mono font-medium text-foreground">
+                      {formatBytes(Math.max(0, (stats.storageLimit || 41943040) - stats.totalSize))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Avg. per Invoice</span>
+                    <span className="font-mono font-medium text-foreground">
                       {stats.totalInvoices > 0
                         ? formatBytes(Math.round(stats.totalSize / stats.totalInvoices))
-                        : "0 Bytes"}
+                        : "0 B"}
                     </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Invoice Statistics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Invoice Statistics
-                </CardTitle>
+            {/* Document Activity Metrics Card */}
+            <Card className="border-border/60 shadow-xs">
+              <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/40">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm font-semibold">Invoice Activity</CardTitle>
+                    <CardDescription className="text-[11px]">
+                      Document library overview
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Total Invoices</span>
-                    </div>
-                    <span className="text-xl font-bold">{stats.totalInvoices}</span>
-                  </div>
 
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Upload className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Uploaded</span>
-                    </div>
-                    <span className="text-lg font-semibold">{stats.uploadedInvoices}</span>
+              <CardContent className="p-4 sm:p-5 space-y-2.5">
+                <div className="flex items-center justify-between p-2.5 rounded-xl border border-border/40 bg-muted/20 text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <FileText className="h-3.5 w-3.5 text-primary" />
+                    <span>Total Invoices</span>
                   </div>
+                  <span className="font-bold font-mono text-sm text-foreground">{stats.totalInvoices}</span>
+                </div>
 
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <PenSquare className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Created</span>
-                    </div>
-                    <span className="text-lg font-semibold">{stats.createdInvoices}</span>
+                <div className="flex items-center justify-between p-2.5 rounded-xl border border-border/40 bg-muted/20 text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Upload className="h-3.5 w-3.5 text-indigo-500" />
+                    <span>Uploaded Files</span>
                   </div>
+                  <span className="font-mono font-medium text-foreground">{stats.uploadedInvoices}</span>
+                </div>
 
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">This Month</span>
-                    </div>
-                    <span className="text-lg font-semibold">{stats.invoicesThisMonth}</span>
+                <div className="flex items-center justify-between p-2.5 rounded-xl border border-border/40 bg-muted/20 text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <PenSquare className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Created Invoices</span>
                   </div>
+                  <span className="font-mono font-medium text-foreground">{stats.createdInvoices}</span>
+                </div>
 
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <Folder className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">Total Groups</span>
-                    </div>
-                    <span className="text-lg font-semibold">{stats.totalGroups}</span>
+                <div className="flex items-center justify-between p-2.5 rounded-xl border border-border/40 bg-muted/20 text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Added This Month</span>
                   </div>
+                  <span className="font-mono font-medium text-foreground">{stats.invoicesThisMonth}</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl border border-border/40 bg-muted/20 text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Folder className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Total Folders</span>
+                  </div>
+                  <span className="font-mono font-medium text-foreground">{stats.totalGroups}</span>
                 </div>
               </CardContent>
             </Card>
@@ -940,4 +569,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-

@@ -10,8 +10,26 @@ import { DeleteGroupDialog } from "@/components/DeleteGroupDialog";
 import { GroupBreadcrumb } from "@/components/GroupBreadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { FolderPlus, Loader2, Upload, FileText, FolderTree as FolderTreeIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  FolderPlus,
+  Loader2,
+  Upload,
+  FileText,
+  FolderTree as FolderTreeIcon,
+  Plus,
+  HardDrive,
+  Sparkles,
+  Folder,
+  Layers,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 
@@ -28,6 +46,14 @@ export default function DashboardPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+
+  // Storage Stats Widget State
+  const [storageData, setStorageData] = useState<{
+    currentUsage: number;
+    storageLimit: number;
+    percentUsed: string;
+  } | null>(null);
+
   const { toast } = useToast();
   const router = useRouter();
 
@@ -36,9 +62,9 @@ export default function DashboardPage() {
       setIsLoadingGroups(true);
       const response = await fetch("/api/groups");
       if (!response.ok) throw new Error("Failed to fetch groups");
-      
+
       const data = await response.json();
-      setGroups(data.groups);
+      setGroups(data.groups || []);
     } catch (error) {
       console.error("Error fetching groups:", error);
       toast({
@@ -51,17 +77,36 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchStorageInfo = async () => {
+    try {
+      const res = await fetch("/api/storage/check");
+      if (res.ok) {
+        const data = await res.json();
+        setStorageData({
+          currentUsage: data.currentUsage || 0,
+          storageLimit: data.storageLimit || 41943040,
+          percentUsed: data.percentUsed || "0",
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     fetchGroups();
+    fetchStorageInfo();
   }, []);
 
   const handleUploadComplete = () => {
-    fetchGroups(); // Refresh groups to update counts
+    fetchGroups();
+    fetchStorageInfo();
     setRefreshTrigger((prev) => prev + 1);
   };
 
   const handleInvoiceChange = () => {
-    fetchGroups(); // Refresh groups when invoices are moved or deleted
+    fetchGroups();
+    fetchStorageInfo();
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -89,7 +134,6 @@ export default function DashboardPage() {
   };
 
   const handleDeleteSuccess = () => {
-    // If we deleted the current group, go back to root
     if (groupToDelete?.id === currentGroupId) {
       setCurrentGroupId(null);
     }
@@ -102,28 +146,87 @@ export default function DashboardPage() {
     setMobileSheetOpen(false);
   };
 
+  const currentGroupObj = groups.find((g) => g.id === currentGroupId);
+
+  const formatMB = (bytes: number) => {
+    return (bytes / (1024 * 1024)).toFixed(1);
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-          {/* Desktop Sidebar - Group Navigation */}
-          <div className="hidden lg:block lg:col-span-1">
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-sm">Folders</h3>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleCreateGroup()}
-                    className="h-8 w-8 p-0"
-                  >
-                    <FolderPlus className="h-4 w-4" />
-                  </Button>
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6">
+        {/* Top Header Banner */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-border/40">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+                {currentGroupObj ? currentGroupObj.name : "Invoice Management"}
+              </h1>
+              <Badge variant="secondary" className="text-[11px] font-mono px-2 py-0.5">
+                {currentGroupId ? "Folder View" : "All Documents"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Store, organize, extract, and manage your invoice workflows with ease.
+            </p>
+          </div>
+
+          {/* Action CTAs */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => setUploadCardOpen(!uploadCardOpen)}
+              variant={uploadCardOpen ? "secondary" : "outline"}
+              size="sm"
+              className="h-9 gap-1.5 text-xs font-medium border-border/80 shadow-xs"
+            >
+              <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>{uploadCardOpen ? "Hide Upload" : "Upload Invoice"}</span>
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => {
+                const groupParam = currentGroupId ? `?groupId=${currentGroupId}` : "";
+                router.push(`/new${groupParam}`);
+              }}
+              size="sm"
+              className="h-9 gap-1.5 text-xs font-medium shadow-xs"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Create Invoice</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Dashboard Grid Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 items-start">
+          {/* Desktop Left Sidebar: Folders Navigation */}
+          <div className="hidden lg:block lg:col-span-1 sticky top-6">
+            <Card className="border-border/60 shadow-xs overflow-hidden">
+              <div className="p-3.5 border-b border-border/40 flex items-center justify-between bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <Folder className="h-4 w-4 text-amber-500/90" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Folders
+                  </span>
                 </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => handleCreateGroup()}
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="Create New Folder"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <CardContent className="p-2">
                 {isLoadingGroups ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <span className="text-xs">Loading folders...</span>
                   </div>
                 ) : (
                   <GroupTree
@@ -136,29 +239,71 @@ export default function DashboardPage() {
                   />
                 )}
               </CardContent>
+
+              {/* Sidebar Footer Quota Mini Widget */}
+              {storageData && (
+                <div className="p-3 border-t border-border/40 bg-muted/10 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+                    <span className="flex items-center gap-1.5 font-medium text-foreground">
+                      <HardDrive className="h-3 w-3 text-primary" />
+                      Storage
+                    </span>
+                    <span>
+                      {formatMB(storageData.currentUsage)} / {formatMB(storageData.storageLimit)} MB ({storageData.percentUsed}%)
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        parseFloat(storageData.percentUsed) >= 90
+                          ? "bg-destructive"
+                          : parseFloat(storageData.percentUsed) >= 70
+                          ? "bg-amber-500"
+                          : "bg-primary"
+                      }`}
+                      style={{ width: `${Math.min(100, parseFloat(storageData.percentUsed))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
 
-          {/* Main Content */}
+          {/* Main Area */}
           <div className="lg:col-span-3 space-y-4 sm:space-y-6">
-            {/* Mobile Folder Button & Breadcrumb */}
-            <div className="flex items-center gap-2 sm:gap-4">
-              {/* Mobile Folder Sheet */}
-              <div className="lg:hidden">
+            {/* Mobile Header Toolbar & Breadcrumb */}
+            <div className="flex items-center gap-2 bg-card/60 p-2 rounded-xl border border-border/50">
+              {/* Mobile Folder Sheet Trigger */}
+              <div className="lg:hidden shrink-0">
                 <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
                   <SheetTrigger asChild>
-                    <Button variant="outline" size="icon" className="flex-shrink-0">
-                      <FolderTreeIcon className="h-5 w-5" />
+                    <Button variant="outline" size="sm" className="h-8 px-2.5 gap-1.5 text-xs">
+                      <FolderTreeIcon className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Folders</span>
                     </Button>
                   </SheetTrigger>
-                  <SheetContent side="left" className="w-[280px] sm:w-[350px]">
-                    <SheetHeader>
-                      <SheetTitle>Folders</SheetTitle>
+                  <SheetContent side="left" className="w-[300px] sm:w-[360px] p-0 flex flex-col">
+                    <SheetHeader className="p-4 border-b">
+                      <div className="flex items-center justify-between">
+                        <SheetTitle className="text-sm font-semibold flex items-center gap-2">
+                          <Folder className="h-4 w-4 text-amber-500" />
+                          Folders
+                        </SheetTitle>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCreateGroup()}
+                          className="h-7 text-xs gap-1"
+                        >
+                          <FolderPlus className="h-3.5 w-3.5" />
+                          New
+                        </Button>
+                      </div>
                     </SheetHeader>
-                    <div className="mt-6">
+                    <div className="p-3 overflow-y-auto flex-1">
                       {isLoadingGroups ? (
                         <div className="flex items-center justify-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         </div>
                       ) : (
                         <GroupTree
@@ -175,7 +320,7 @@ export default function DashboardPage() {
                 </Sheet>
               </div>
 
-              {/* Breadcrumb */}
+              {/* Breadcrumb Path */}
               <div className="flex-1 min-w-0 overflow-x-auto">
                 <GroupBreadcrumb
                   currentGroupId={currentGroupId}
@@ -183,47 +328,19 @@ export default function DashboardPage() {
                   onGroupSelect={setCurrentGroupId}
                 />
               </div>
-            </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <Button
-                onClick={() => setUploadCardOpen(!uploadCardOpen)}
-                variant={uploadCardOpen ? "default" : "outline"}
-                className="gap-2 flex-1 sm:flex-none"
+                variant="ghost"
                 size="sm"
+                onClick={() => handleCreateGroup()}
+                className="hidden sm:inline-flex lg:hidden h-8 text-xs gap-1 shrink-0"
               >
-                <Upload className="h-4 w-4" />
-                <span className="hidden xs:inline">
-                  {uploadCardOpen ? "Hide Upload" : "Upload Invoice"}
-                </span>
-                <span className="xs:hidden my-1 md:my-0">Upload</span>
-              </Button>
-              <Button
-                onClick={() => {
-                  const groupParam = currentGroupId ? `?groupId=${currentGroupId}` : "";
-                  router.push(`/new${groupParam}`);
-                }}
-                variant="outline"
-                className="gap-2 flex-1 sm:flex-none"
-                size="sm"
-              >
-                <FileText className="h-4 w-4" />
-                <span className="hidden xs:inline">Create Invoice</span>
-                <span className="xs:hidden my-1 md:my-0">Create</span>
-              </Button>
-              <Button 
-                onClick={() => handleCreateGroup()} 
-                className="gap-2 flex-1 sm:flex-none lg:hidden"
-                size="sm"
-              >
-                <FolderPlus className="h-4 w-4" />
-                <span className="hidden xs:inline">New Folder</span>
-                <span className="xs:hidden my-1 md:my-0">Folder</span>
+                <FolderPlus className="h-3.5 w-3.5" />
+                Folder
               </Button>
             </div>
 
-            {/* Upload Section */}
+            {/* Expandable Upload Dropzone */}
             <InvoiceUpload
               onUploadComplete={handleUploadComplete}
               currentGroupId={currentGroupId}
@@ -231,7 +348,7 @@ export default function DashboardPage() {
               onOpenChange={setUploadCardOpen}
             />
 
-            {/* Invoice List Section */}
+            {/* Invoices List with Metrics, Search, Sort & Table/Grid view */}
             <InvoiceList
               refreshTrigger={refreshTrigger}
               currentGroupId={currentGroupId}
@@ -242,7 +359,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Dialogs */}
+      {/* Group Dialogs */}
       <CreateGroupDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}

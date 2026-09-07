@@ -104,22 +104,22 @@ export function DeleteGroupDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            Delete Group
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            Delete Folder
           </DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete "{group?.name}"?
+          <DialogDescription className="text-xs">
+            Are you sure you want to delete folder "{group?.name}"?
           </DialogDescription>
         </DialogHeader>
 
         {hasContent && (
-          <div className="space-y-4 py-4">
-            <div className="bg-muted p-3 rounded-md text-sm">
-              <p className="font-medium mb-1">This group contains:</p>
-              <ul className="list-disc list-inside space-y-1">
+          <div className="space-y-4 py-2">
+            <div className="bg-muted/40 border border-border/50 p-3 rounded-xl text-xs space-y-1.5">
+              <p className="font-medium text-foreground">Folder Contents:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
                 {invoiceCount > 0 && (
                   <li>
                     {invoiceCount} {invoiceCount === 1 ? "invoice" : "invoices"}
@@ -133,19 +133,19 @@ export function DeleteGroupDialog({
               </ul>
             </div>
 
-            <RadioGroup value={deleteAction} onValueChange={(v: any) => setDeleteAction(v)}>
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="move" id="move" />
-                <div className="flex-1">
-                  <Label htmlFor="move" className="font-medium cursor-pointer">
-                    Move contents to another location
+            <RadioGroup value={deleteAction} onValueChange={(v: any) => setDeleteAction(v)} className="space-y-3">
+              <div className="flex items-start space-x-2.5 rounded-xl border border-border/50 p-3 hover:bg-muted/20 transition-colors">
+                <RadioGroupItem value="move" id="move" className="mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="move" className="text-xs font-medium cursor-pointer">
+                    Move contents to another folder
                   </Label>
                   {deleteAction === "move" && (
                     <Select value={targetGroupId} onValueChange={setTargetGroupId}>
-                      <SelectTrigger className="mt-2">
+                      <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Select destination" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="text-xs">
                         <SelectItem value="root">Root (All Invoices)</SelectItem>
                         {availableGroups.map((g) => (
                           <SelectItem key={g.id} value={g.id}>
@@ -158,14 +158,14 @@ export function DeleteGroupDialog({
                 </div>
               </div>
 
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="delete" id="delete" />
+              <div className="flex items-start space-x-2.5 rounded-xl border border-destructive/20 bg-destructive/5 p-3">
+                <RadioGroupItem value="delete" id="delete" className="mt-0.5 text-destructive" />
                 <div className="flex-1">
-                  <Label htmlFor="delete" className="font-medium cursor-pointer text-destructive">
+                  <Label htmlFor="delete" className="text-xs font-medium cursor-pointer text-destructive">
                     Delete all contents permanently
                   </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This will permanently delete all invoices and subfolders
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Permanently deletes all nested invoices and subfolders.
                   </p>
                 </div>
               </div>
@@ -174,27 +174,29 @@ export function DeleteGroupDialog({
         )}
 
         {!hasContent && (
-          <p className="text-sm text-muted-foreground py-4">
-            This group is empty and will be deleted.
+          <p className="text-xs text-muted-foreground py-2">
+            This folder is empty and will be safely deleted.
           </p>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isDeleting}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={isDeleting} className="text-xs h-9">
             Cancel
           </Button>
           <Button
             variant="destructive"
+            size="sm"
             onClick={handleDelete}
             disabled={isDeleting}
+            className="text-xs h-9"
           >
             {isDeleting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 Deleting...
               </>
             ) : (
-              "Delete Group"
+              "Delete Folder"
             )}
           </Button>
         </DialogFooter>

@@ -85,9 +85,12 @@ export default function SingleInvoicePage() {
     fetchGroups();
     fetchUserProfile();
     
-    // Check if user has API key in localStorage
-    const apiKey = localStorage.getItem("gemini_api_key");
-    setHasApiKey(!!apiKey);
+    // Check if user has API key in localStorage (Gemini or Groq)
+    const activeProvider = localStorage.getItem("ai_provider") || "gemini";
+    const geminiKey = localStorage.getItem("gemini_api_key");
+    const groqKey = localStorage.getItem("groq_api_key");
+    const hasKey = activeProvider === "groq" ? !!groqKey : !!geminiKey || !!groqKey;
+    setHasApiKey(hasKey);
     
     // Poll for extraction status every 5 seconds if processing
     const interval = setInterval(() => {
@@ -155,13 +158,23 @@ export default function SingleInvoicePage() {
   const handleExtract = async () => {
     setExtracting(true);
     try {
-      // Get API key from localStorage
-      const userApiKey = localStorage.getItem("gemini_api_key");
+      // Get active AI configuration from localStorage
+      const provider = (localStorage.getItem("ai_provider") as "gemini" | "groq") || "gemini";
+      const userApiKey = provider === "groq"
+        ? localStorage.getItem("groq_api_key")
+        : localStorage.getItem("gemini_api_key");
+      const model = provider === "groq"
+        ? localStorage.getItem("groq_model") || "llama-3.3-70b-versatile"
+        : localStorage.getItem("gemini_model") || "gemini-2.5-flash";
 
       const response = await fetch(`/api/invoices/${params.id}/extract`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userApiKey: userApiKey || undefined }),
+        body: JSON.stringify({
+          provider,
+          userApiKey: userApiKey || undefined,
+          model,
+        }),
       });
 
       if (!response.ok) {
@@ -309,7 +322,7 @@ export default function SingleInvoicePage() {
                               </span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <p>Add your own Gemini AI API key in the profile page for unlimited AI extractions</p>
+                              <p>Add your own Gemini or Groq API key in the Profile page for unlimited AI extractions</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>

@@ -35,6 +35,13 @@
 // lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
 
+// Patch BigInt serialization for Next.js JSON responses
+if (typeof BigInt !== "undefined" && !(BigInt.prototype as any).toJSON) {
+  (BigInt.prototype as any).toJSON = function () {
+    return Number(this);
+  };
+}
+
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
 const prisma =

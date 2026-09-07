@@ -95,22 +95,24 @@ export function CreateGroupDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+      <DialogContent className="rounded-2xl sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Group</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-base font-semibold">
+            {parentId ? "Create New Subfolder" : "Create New Folder"}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
             {parentId
-              ? "Create a new subfolder in the selected group"
-              : "Create a new group to organize your invoices"}
+              ? "Create a nested subfolder to further organize your invoices"
+              : "Create a new folder to organize and categorize your invoices"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="group-name">Group Name</Label>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="folder-name" className="text-xs font-medium">Folder Name</Label>
             <Input
-              id="group-name"
-              placeholder="Enter group name"
+              id="folder-name"
+              placeholder="e.g. Q1 Expenses, Marketing Invoices"
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
@@ -119,27 +121,30 @@ export function CreateGroupDialog({
                 }
               }}
               disabled={isCreating}
+              className="h-9 text-xs"
               autoFocus
             />
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button
             variant="outline"
+            size="sm"
             onClick={handleClose}
             disabled={isCreating}
+            className="text-xs h-9"
           >
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={isCreating}>
+          <Button size="sm" onClick={handleCreate} disabled={isCreating} className="text-xs h-9">
             {isCreating ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 Creating...
               </>
             ) : (
-              "Create"
+              "Create Folder"
             )}
           </Button>
         </DialogFooter>

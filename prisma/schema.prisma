@@ -23,6 +23,11 @@ model User {
   // AI Extraction tracking
   hasUsedFreeExtraction Boolean @default(false)
 
+  // Storage and usage limits (in bytes, default 40MB = 41943040)
+  storageLimit  BigInt    @default(41943040)
+  maxInvoices   Int?      @default(100)
+  role          String    @default("user")
+
   @@unique([email])
   @@map("user")
 }

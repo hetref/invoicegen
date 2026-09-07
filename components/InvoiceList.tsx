@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -18,6 +20,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,18 +49,44 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Download, Eye, Trash2, FileText, Loader2, HardDrive, File, FolderInput, Mail } from "lucide-react";
+import {
+  Download,
+  Eye,
+  Trash2,
+  FileText,
+  Loader2,
+  HardDrive,
+  File,
+  FolderInput,
+  Mail,
+  Search,
+  LayoutGrid,
+  List,
+  ArrowUpDown,
+  Sparkles,
+  CheckCircle2,
+  ExternalLink,
+  MoreVertical,
+  Calendar,
+  DollarSign,
+  AlertCircle,
+  Plus,
+  X,
+  FileCode,
+  Image as ImageIcon,
+  Check,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { MoveInvoiceDialog } from "./MoveInvoiceDialog";
 import { Group } from "./GroupTree";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-interface Invoice {
+export interface InvoiceItem {
   id: string;
   fileName: string;
   fileSize: number;
@@ -59,6 +94,15 @@ interface Invoice {
   r2Key: string;
   uploadedAt: string;
   groupId: string | null;
+  isManuallyCreated?: boolean;
+  isExtracted?: boolean;
+  extractionStatus?: string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  billedToName?: string | null;
+  paymentToName?: string | null;
+  totalAmount?: number | null;
+  currency?: string | null;
 }
 
 interface InvoiceListProps {
@@ -68,21 +112,40 @@ interface InvoiceListProps {
   onInvoiceChange?: () => void;
 }
 
-export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInvoiceChange }: InvoiceListProps) {
+export function InvoiceList({
+  refreshTrigger,
+  currentGroupId,
+  groups = [],
+  onInvoiceChange,
+}: InvoiceListProps) {
   const router = useRouter();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Search, Filter, Sort & View Mode State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<"all" | "uploaded" | "created" | "extracted">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "name" | "size" | "amount">("newest");
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
+
+  // Dialogs State
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+
+  const [previewInvoice, setPreviewInvoice] = useState<InvoiceItem | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
   const [moveInvoiceDialogOpen, setMoveInvoiceDialogOpen] = useState(false);
-  const [invoiceToMove, setInvoiceToMove] = useState<Invoice | null>(null);
+  const [invoiceToMove, setInvoiceToMove] = useState<InvoiceItem | null>(null);
+
   const [sendInvoiceDialogOpen, setSendInvoiceDialogOpen] = useState(false);
-  const [invoiceToSend, setInvoiceToSend] = useState<Invoice | null>(null);
+  const [invoiceToSend, setInvoiceToSend] = useState<InvoiceItem | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [hasSmtpConfigured, setHasSmtpConfigured] = useState(false);
+  const [smtpSenderAddress, setSmtpSenderAddress] = useState<string>("");
+  const [sendError, setSendError] = useState<string | null>(null);
   const [emailData, setEmailData] = useState({
     recipientEmail: "",
     subject: "",
@@ -90,6 +153,7 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
     senderName: "",
     replyTo: "",
   });
+
   const { toast } = useToast();
 
   const fetchInvoices = async () => {
@@ -97,9 +161,9 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
       setIsLoading(true);
       const response = await fetch("/api/invoices");
       if (!response.ok) throw new Error("Failed to fetch invoices");
-      
+
       const data = await response.json();
-      setInvoices(data.invoices);
+      setInvoices(data.invoices || []);
     } catch (error) {
       console.error("Error fetching invoices:", error);
       toast({
@@ -116,19 +180,75 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
     fetchInvoices();
   }, [refreshTrigger, currentGroupId]);
 
-  // Filter invoices by current group
-  const filteredInvoices = currentGroupId !== undefined
-    ? invoices.filter((inv) => inv.groupId === currentGroupId)
-    : invoices;
+  // Filter invoices by current group, search query, and filter type
+  const processedInvoices = useMemo(() => {
+    let result = currentGroupId !== undefined && currentGroupId !== null
+      ? invoices.filter((inv) => inv.groupId === currentGroupId)
+      : [...invoices];
 
-  const handleDownload = async (invoice: Invoice) => {
+    // Filter by type
+    if (filterType === "uploaded") {
+      result = result.filter((i) => !i.isManuallyCreated);
+    } else if (filterType === "created") {
+      result = result.filter((i) => i.isManuallyCreated);
+    } else if (filterType === "extracted") {
+      result = result.filter((i) => i.isExtracted);
+    }
+
+    // Search query filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (i) =>
+          i.fileName.toLowerCase().includes(q) ||
+          (i.invoiceNumber && i.invoiceNumber.toLowerCase().includes(q)) ||
+          (i.billedToName && i.billedToName.toLowerCase().includes(q)) ||
+          (i.paymentToName && i.paymentToName.toLowerCase().includes(q))
+      );
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      if (sortBy === "newest") {
+        return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
+      }
+      if (sortBy === "oldest") {
+        return new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime();
+      }
+      if (sortBy === "name") {
+        return a.fileName.localeCompare(b.fileName);
+      }
+      if (sortBy === "size") {
+        return b.fileSize - a.fileSize;
+      }
+      if (sortBy === "amount") {
+        return (b.totalAmount || 0) - (a.totalAmount || 0);
+      }
+      return 0;
+    });
+
+    return result;
+  }, [invoices, currentGroupId, filterType, searchQuery, sortBy]);
+
+  // Aggregate stats
+  const stats = useMemo(() => {
+    const total = invoices.length;
+    const uploaded = invoices.filter((i) => !i.isManuallyCreated).length;
+    const created = invoices.filter((i) => i.isManuallyCreated).length;
+    const extracted = invoices.filter((i) => i.isExtracted).length;
+    const totalSize = invoices.reduce((sum, i) => sum + (i.fileSize || 0), 0);
+    const totalAmount = invoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+
+    return { total, uploaded, created, extracted, totalSize, totalAmount };
+  }, [invoices]);
+
+  const handleDownload = async (invoice: InvoiceItem) => {
     try {
       const response = await fetch(`/api/invoices/${invoice.id}/download`);
       if (!response.ok) throw new Error("Failed to get download URL");
-      
+
       const { downloadUrl, fileName } = await response.json();
-      
-      // Create a temporary link and trigger download
+
       const link = document.createElement("a");
       link.href = downloadUrl;
       link.download = fileName;
@@ -137,34 +257,34 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
       document.body.removeChild(link);
 
       toast({
-        title: "Success",
-        description: "Download started",
+        title: "Download Started",
+        description: `Downloading ${fileName}`,
       });
     } catch (error) {
       console.error("Download error:", error);
       toast({
-        title: "Error",
-        description: "Failed to download invoice",
+        title: "Download Failed",
+        description: "Could not download invoice file",
         variant: "destructive",
       });
     }
   };
 
-  const handleView = async (invoice: Invoice) => {
+  const handleView = async (invoice: InvoiceItem) => {
     try {
       setIsLoadingPreview(true);
       setPreviewInvoice(invoice);
-      
+
       const response = await fetch(`/api/invoices/${invoice.id}/download`);
       if (!response.ok) throw new Error("Failed to get preview URL");
-      
+
       const { downloadUrl } = await response.json();
       setPreviewUrl(downloadUrl);
     } catch (error) {
       console.error("Preview error:", error);
       toast({
-        title: "Error",
-        description: "Failed to load preview",
+        title: "Preview Error",
+        description: "Failed to load document preview",
         variant: "destructive",
       });
       setPreviewInvoice(null);
@@ -190,66 +310,83 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
       if (!response.ok) throw new Error("Failed to delete invoice");
 
       toast({
-        title: "Success",
-        description: "Invoice deleted successfully",
+        title: "Invoice Deleted",
+        description: "The invoice document was permanently deleted.",
       });
 
-      // Refresh the list
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
       fetchInvoices();
-      onInvoiceChange?.(); // Notify parent to refresh groups
+      onInvoiceChange?.();
     } catch (error) {
       console.error("Delete error:", error);
       toast({
-        title: "Error",
-        description: "Failed to delete invoice",
+        title: "Delete Failed",
+        description: "Could not delete invoice file",
         variant: "destructive",
       });
     } finally {
       setIsDeleting(false);
-      setDeleteDialogOpen(false);
-      setInvoiceToDelete(null);
     }
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    if (!bytes || bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
   };
 
-  const handleClosePreview = () => {
-    setPreviewInvoice(null);
-    setPreviewUrl(null);
+  const formatCurrency = (amount?: number | null, currency?: string | null) => {
+    if (amount === undefined || amount === null) return null;
+    try {
+      return new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: currency || "INR",
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      return `${currency || "₹"} ${amount.toFixed(2)}`;
+    }
   };
 
-  const handleMoveClick = (invoice: Invoice) => {
-    setInvoiceToMove(invoice);
-    setMoveInvoiceDialogOpen(true);
-  };
-
-  const handleMoveSuccess = () => {
-    fetchInvoices();
-    onInvoiceChange?.(); // Notify parent to refresh groups
-  };
-
-  const handleSendClick = (invoice: Invoice) => {
+  const handleSendClick = (invoice: InvoiceItem) => {
     setInvoiceToSend(invoice);
-    
-    // Get default values from SMTP settings
+
     const savedSmtp = localStorage.getItem("custom_smtp_settings");
     let defaultSenderName = "";
     let defaultReplyTo = "";
-    
+    let isSmtpSet = false;
+    let senderEmail = "";
+
     if (savedSmtp) {
-      const smtpSettings = JSON.parse(savedSmtp);
-      defaultSenderName = smtpSettings.senderName || "";
-      defaultReplyTo = smtpSettings.replyTo || "";
+      try {
+        const smtpSettings = JSON.parse(savedSmtp);
+        if (
+          smtpSettings.host &&
+          smtpSettings.user &&
+          smtpSettings.password &&
+          smtpSettings.mailFrom
+        ) {
+          isSmtpSet = true;
+          senderEmail = smtpSettings.mailFrom;
+          defaultSenderName = smtpSettings.senderName || "";
+          defaultReplyTo = smtpSettings.replyTo || "";
+        }
+      } catch {
+        // ignore
+      }
     }
-    
+
+    setHasSmtpConfigured(isSmtpSet);
+    setSmtpSenderAddress(senderEmail);
+    setSendError(null);
+
     setEmailData({
       recipientEmail: "",
       subject: `Invoice: ${invoice.fileName}`,
-      message: `Dear recipient,\n\nPlease find attached the invoice ${invoice.fileName}.\n\nBest regards`,
+      message: `Dear Client,\n\nPlease find attached the invoice ${invoice.fileName}.\n\nBest regards,\n${defaultSenderName || "Accounts Team"}`,
       senderName: defaultSenderName,
       replyTo: defaultReplyTo,
     });
@@ -259,10 +396,33 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
   const handleSendInvoice = async () => {
     if (!invoiceToSend) return;
 
-    if (!emailData.recipientEmail || !emailData.subject) {
+    setSendError(null);
+    const customSmtpStr = localStorage.getItem("custom_smtp_settings");
+    const customSmtp = customSmtpStr ? JSON.parse(customSmtpStr) : null;
+
+    if (
+      !customSmtp ||
+      !customSmtp.host ||
+      !customSmtp.user ||
+      !customSmtp.password ||
+      !customSmtp.mailFrom
+    ) {
+      const err = "Please configure your custom SMTP settings in your Profile before sending invoices.";
+      setSendError(err);
       toast({
-        title: "Error",
-        description: "Please fill in recipient email and subject",
+        title: "SMTP Not Configured",
+        description: err,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!emailData.recipientEmail || !emailData.subject) {
+      const err = "Please fill in recipient email and subject";
+      setSendError(err);
+      toast({
+        title: "Validation Error",
+        description: err,
         variant: "destructive",
       });
       return;
@@ -270,10 +430,6 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
 
     setIsSending(true);
     try {
-      // Get custom SMTP settings from localStorage
-      const customSmtpStr = localStorage.getItem("custom_smtp_settings");
-      const customSmtp = customSmtpStr ? JSON.parse(customSmtpStr) : null;
-
       const response = await fetch(`/api/invoices/${invoiceToSend.id}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,24 +439,27 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
         }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to send invoice");
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to send invoice email");
       }
 
       toast({
-        title: "Success",
-        description: `Invoice sent to ${emailData.recipientEmail}`,
+        title: "Email Sent Successfully",
+        description: `Invoice delivered to ${emailData.recipientEmail}`,
       });
 
       setSendInvoiceDialogOpen(false);
       setInvoiceToSend(null);
-      setEmailData({ recipientEmail: "", subject: "", message: "", senderName: "", replyTo: "" });
+      setSendError(null);
     } catch (error: any) {
       console.error("Send invoice error:", error);
+      const msg = error.message || "Failed to send invoice email";
+      setSendError(msg);
       toast({
-        title: "Error",
-        description: error.message || "Failed to send invoice",
+        title: "Email Failed",
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -308,244 +467,586 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
     }
   };
 
-  // Calculate statistics
-  const totalInvoices = filteredInvoices.length;
-  const totalSize = filteredInvoices.reduce((sum, invoice) => sum + invoice.fileSize, 0);
+  const isPdfMime = (mimeType: string) => mimeType === "application/pdf";
 
   return (
-    <>
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
-            <File className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalInvoices}</div>
-            <p className="text-xs text-muted-foreground">
-              {totalInvoices === 1 ? "invoice" : "invoices"} stored
-            </p>
+    <div className="space-y-4 sm:space-y-6">
+      {/* 3 Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="border-border/60 shadow-xs hover:border-border transition-colors">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Total Invoices</span>
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <File className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-bold tracking-tight tabular-nums font-mono">
+                {stats.total}
+              </span>
+              <span className="text-[11px] text-muted-foreground">invoices</span>
+            </div>
+            <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span>{stats.uploaded} uploaded</span>
+              <span>•</span>
+              <span>{stats.created} created</span>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-            <HardDrive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatFileSize(totalSize)}</div>
-            <p className="text-xs text-muted-foreground">
-              across all invoices
-            </p>
+        <Card className="border-border/60 shadow-xs hover:border-border transition-colors">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Storage Consumed</span>
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <HardDrive className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-bold tracking-tight tabular-nums font-mono">
+                {formatFileSize(stats.totalSize)}
+              </span>
+            </div>
+            <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>Cloud Storage Footprint</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-xs hover:border-border transition-colors">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">AI Extracted Data</span>
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <Sparkles className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-bold tracking-tight tabular-nums font-mono">
+                {stats.extracted}
+              </span>
+              <span className="text-[11px] text-muted-foreground">processed</span>
+            </div>
+            <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              {stats.totalAmount > 0 ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                  {formatCurrency(stats.totalAmount)} total parsed
+                </span>
+              ) : (
+                <span>Structured invoice intelligence</span>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Invoices</CardTitle>
-          <CardDescription>
-            Manage and download your uploaded invoices
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredInvoices.length === 0 ? (
-            <div className="text-center py-8">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">
+      {/* Main Workspace Card */}
+      <Card className="border-border/60 shadow-xs">
+        <CardHeader className="p-4 sm:p-5 pb-3 sm:pb-4 border-b border-border/40">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-semibold">
                 {currentGroupId !== undefined && currentGroupId !== null
-                  ? "No invoices in this group"
-                  : "No invoices uploaded yet"}
-              </p>
+                  ? "Folder Invoices"
+                  : "All Invoices"}
+              </CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                Manage, search, preview, and download your stored documents
+              </CardDescription>
             </div>
-          ) : (
+
+            {/* View Mode & Sorter */}
+            <div className="flex items-center gap-2 self-end md:self-auto">
+              {/* Sort Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 font-normal">
+                    <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="hidden sm:inline">Sort:</span>
+                    <span className="font-medium capitalize">{sortBy}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40 text-xs">
+                  <DropdownMenuItem onClick={() => setSortBy("newest")}>Newest First</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("oldest")}>Oldest First</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("name")}>File Name (A-Z)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("size")}>Size (Largest)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("amount")}>Amount (Highest)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* View Switcher Toggle */}
+              <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/40">
+                <Button
+                  type="button"
+                  variant={viewMode === "table" ? "secondary" : "ghost"}
+                  size="icon"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setViewMode("table")}
+                  title="Table View"
+                >
+                  <List className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewMode === "grid" ? "secondary" : "ghost"}
+                  size="icon"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setViewMode("grid")}
+                  title="Grid View"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Search Bar & Filter Tabs */}
+          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search by file name, invoice #, client or vendor..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-8 h-8 text-xs font-normal bg-background"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+              {[
+                { id: "all", label: "All", count: stats.total },
+                { id: "uploaded", label: "Uploaded", count: stats.uploaded },
+                { id: "created", label: "Created", count: stats.created },
+                { id: "extracted", label: "AI Extracted", count: stats.extracted },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setFilterType(tab.id as any)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${filterType === tab.id
+                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] tabular-nums ${filterType === tab.id ? "text-primary-foreground/80" : "text-muted-foreground/70"}`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
+              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+              <span className="text-xs">Loading invoice records...</span>
+            </div>
+          ) : processedInvoices.length === 0 ? (
+            <div className="text-center py-16 px-4">
+              <div className="p-4 rounded-full bg-muted/60 text-muted-foreground inline-block mb-3">
+                <FileText className="h-8 w-8" />
+              </div>
+              <h4 className="text-sm font-semibold mb-1">
+                {searchQuery ? "No matching invoices found" : "No invoices found"}
+              </h4>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-4">
+                {searchQuery
+                  ? `No invoices match "${searchQuery}". Try a different search keyword or clear filters.`
+                  : currentGroupId !== null
+                    ? "This folder is currently empty. Upload or move invoices here."
+                    : "You haven't uploaded or generated any invoices yet."}
+              </p>
+              {searchQuery ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSearchQuery("")}
+                  className="text-xs h-8"
+                >
+                  Clear Search
+                </Button>
+              ) : (
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => router.push("/new")}
+                    className="text-xs h-8 gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create Invoice
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : viewMode === "table" ? (
+            /* Table View */
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>File Name</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Uploaded</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                  <TableRow className="hover:bg-transparent border-border/40">
+                    <TableHead className="text-xs font-semibold h-9">Invoice File</TableHead>
+                    <TableHead className="text-xs font-semibold h-9 hidden md:table-cell">Client / Vendor</TableHead>
+                    <TableHead className="text-xs font-semibold h-9 text-right">Amount</TableHead>
+                    <TableHead className="text-xs font-semibold h-9 hidden sm:table-cell text-right">Size</TableHead>
+                    <TableHead className="text-xs font-semibold h-9 hidden lg:table-cell">Uploaded</TableHead>
+                    <TableHead className="text-xs font-semibold h-9 text-right pr-4">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredInvoices.map((invoice) => (
-                    <ContextMenu key={invoice.id}>
-                      <ContextMenuTrigger asChild>
-                        <TableRow 
-                          className="cursor-pointer hover:bg-accent/50"
-                          onClick={() => router.push(`/invoices/${invoice.id}`)}
-                        >
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          {invoice.fileName}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatFileSize(invoice.fileSize)}</TableCell>
-                      <TableCell>
-                        {format(new Date(invoice.uploadedAt), "MMM d, yyyy")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleView(invoice);
-                            }}
-                            title="View Invoice"
+                  {processedInvoices.map((invoice) => {
+                    const isPdf = isPdfMime(invoice.mimeType);
+                    const formattedAmt = formatCurrency(invoice.totalAmount, invoice.currency || "INR");
+
+                    return (
+                      <ContextMenu key={invoice.id}>
+                        <ContextMenuTrigger asChild>
+                          <TableRow
+                            className="group cursor-pointer hover:bg-muted/40 transition-colors border-border/40"
+                            onClick={() => router.push(`/invoices/${invoice.id}`)}
                           >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownload(invoice);
-                            }}
-                            title="Download Invoice"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMoveClick(invoice);
-                            }}
-                            title="Move to Group"
-                          >
-                            <FolderInput className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteClick(invoice.id);
-                            }}
-                            className="text-destructive hover:text-destructive"
-                            title="Delete Invoice"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent className="w-56">
-                    <ContextMenuItem
-                      onClick={() => router.push(`/invoices/${invoice.id}`)}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Details
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleView(invoice)}
-                    >
-                      <FileText className="mr-2 h-4 w-4" />
-                      Quick Preview
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleDownload(invoice)}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleSendClick(invoice)}
-                    >
-                      <Mail className="mr-2 h-4 w-4" />
-                      Send Invoice
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleMoveClick(invoice)}
-                    >
-                      <FolderInput className="mr-2 h-4 w-4" />
-                      Move to Group
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleDeleteClick(invoice.id)}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-                  ))}
+                            {/* Invoice File & Details */}
+                            <TableCell className="py-2.5">
+                              <div className="flex items-start gap-2.5">
+                                <div className="p-2 rounded-lg bg-muted text-muted-foreground group-hover:text-primary transition-colors shrink-0 mt-0.5">
+                                  {isPdf ? (
+                                    <FileText className="h-4 w-4" />
+                                  ) : (
+                                    <ImageIcon className="h-4 w-4" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 space-y-0.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-medium text-xs sm:text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                                      {invoice.fileName}
+                                    </span>
+                                    {invoice.isExtracted && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[9px] px-1 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                      >
+                                        AI Extracted
+                                      </Badge>
+                                    )}
+                                    {invoice.isManuallyCreated && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0">
+                                        Created PDF
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
+                                    {invoice.invoiceNumber && (
+                                      <span>#{invoice.invoiceNumber}</span>
+                                    )}
+                                    <span className="sm:hidden">• {formatFileSize(invoice.fileSize)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            {/* Client / Vendor */}
+                            <TableCell className="hidden md:table-cell py-2.5 text-xs text-muted-foreground">
+                              {invoice.billedToName ? (
+                                <span className="text-foreground truncate max-w-[140px] block">
+                                  {invoice.billedToName}
+                                </span>
+                              ) : invoice.paymentToName ? (
+                                <span className="text-muted-foreground truncate max-w-[140px] block">
+                                  {invoice.paymentToName}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
+                            </TableCell>
+
+                            {/* Amount */}
+                            <TableCell className="text-right py-2.5 text-xs font-mono tabular-nums">
+                              {formattedAmt ? (
+                                <span className="font-semibold text-foreground">{formattedAmt}</span>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
+                            </TableCell>
+
+                            {/* Size */}
+                            <TableCell className="hidden sm:table-cell text-right py-2.5 text-xs font-mono text-muted-foreground tabular-nums">
+                              {formatFileSize(invoice.fileSize)}
+                            </TableCell>
+
+                            {/* Upload Date */}
+                            <TableCell className="hidden lg:table-cell py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                              {format(new Date(invoice.uploadedAt), "MMM d, yyyy")}
+                            </TableCell>
+
+                            {/* Quick Action Icons */}
+                            <TableCell className="text-right py-2.5 pr-4">
+                              <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleView(invoice);
+                                  }}
+                                  title="Quick Preview"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(invoice);
+                                  }}
+                                  title="Download"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 hidden sm:inline-flex"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSendClick(invoice);
+                                  }}
+                                  title="Send via Email"
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteClick(invoice.id);
+                                  }}
+                                  title="Delete Invoice"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </ContextMenuTrigger>
+
+                        {/* Right Click Context Menu */}
+                        <ContextMenuContent className="w-48 text-xs">
+                          <ContextMenuItem onClick={() => router.push(`/invoices/${invoice.id}`)} className="gap-2">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open Details Page
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => handleView(invoice)} className="gap-2">
+                            <Eye className="h-3.5 w-3.5" />
+                            Quick Preview
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => handleDownload(invoice)} className="gap-2">
+                            <Download className="h-3.5 w-3.5" />
+                            Download File
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => handleSendClick(invoice)} className="gap-2">
+                            <Mail className="h-3.5 w-3.5" />
+                            Send via Email
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => { setInvoiceToMove(invoice); setMoveInvoiceDialogOpen(true); }} className="gap-2">
+                            <FolderInput className="h-3.5 w-3.5" />
+                            Move to Folder
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem onClick={() => handleDeleteClick(invoice.id)} className="gap-2 text-destructive focus:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete Invoice
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    );
+                  })}
                 </TableBody>
               </Table>
+            </div>
+          ) : (
+            /* Grid / Cards View */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+              {processedInvoices.map((invoice) => {
+                const isPdf = isPdfMime(invoice.mimeType);
+                const formattedAmt = formatCurrency(invoice.totalAmount, invoice.currency || "INR");
+
+                return (
+                  <div
+                    key={invoice.id}
+                    onClick={() => router.push(`/invoices/${invoice.id}`)}
+                    className="group border border-border/60 hover:border-primary/40 rounded-xl p-3.5 bg-card/50 hover:bg-card transition-all cursor-pointer shadow-xs hover:shadow-sm space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="p-2 rounded-lg bg-muted text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-colors shrink-0">
+                          {isPdf ? <FileText className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-xs sm:text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                            {invoice.fileName}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground font-mono">
+                            {format(new Date(invoice.uploadedAt), "MMM d, yyyy")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 -mr-1 text-muted-foreground hover:text-foreground">
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40 text-xs">
+                          <DropdownMenuItem onClick={() => router.push(`/invoices/${invoice.id}`)} className="gap-2">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            View
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload(invoice)} className="gap-2">
+                            <Download className="h-3.5 w-3.5" />
+                            Download
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleSendClick(invoice)} className="gap-2">
+                            <Mail className="h-3.5 w-3.5" />
+                            Send
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setInvoiceToMove(invoice); setMoveInvoiceDialogOpen(true); }} className="gap-2">
+                            <FolderInput className="h-3.5 w-3.5" />
+                            Move
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleDeleteClick(invoice.id)} className="gap-2 text-destructive focus:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-border/30">
+                      <div>
+                        {formattedAmt ? (
+                          <span className="font-semibold text-foreground font-mono">{formattedAmt}</span>
+                        ) : (
+                          <span className="text-muted-foreground font-mono text-[11px]">
+                            {formatFileSize(invoice.fileSize)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {invoice.isExtracted && (
+                          <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                            Extracted
+                          </Badge>
+                        )}
+                        {invoice.isManuallyCreated && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0">
+                            Created
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Alert */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              invoice from our servers.
+            <AlertDialogTitle className="text-base">Permanently Delete Invoice?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              This invoice file and all extracted records will be permanently removed from secure storage.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel disabled={isDeleting} className="text-xs h-9">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
               disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs h-9"
             >
               {isDeleting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                   Deleting...
                 </>
               ) : (
-                "Delete"
+                "Confirm Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Preview Dialog */}
-      <Dialog open={!!previewInvoice} onOpenChange={() => handleClosePreview()}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>{previewInvoice?.fileName}</DialogTitle>
+      {/* Quick Preview Dialog */}
+      <Dialog open={!!previewInvoice} onOpenChange={() => { setPreviewInvoice(null); setPreviewUrl(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="text-base font-medium truncate max-w-[500px]">
+                {previewInvoice?.fileName}
+              </DialogTitle>
+              <DialogDescription className="text-xs mt-0.5">
+                {previewInvoice && formatFileSize(previewInvoice.fileSize)} • Uploaded on {previewInvoice?.uploadedAt && format(new Date(previewInvoice.uploadedAt), "MMM d, yyyy")}
+              </DialogDescription>
+            </div>
+            {previewInvoice && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownload(previewInvoice)}
+                className="h-8 text-xs gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </Button>
+            )}
           </DialogHeader>
-          <div className="mt-4">
+
+          <div className="p-4 overflow-y-auto flex items-center justify-center min-h-[400px]">
             {isLoadingPreview ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <div className="flex flex-col items-center justify-center py-16 gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="text-xs text-muted-foreground">Loading preview...</span>
               </div>
             ) : previewUrl && previewInvoice ? (
-              <div className="border rounded-lg overflow-hidden bg-muted/50">
-                {previewInvoice.mimeType === "application/pdf" ? (
+              <div className="border rounded-xl overflow-hidden bg-muted/20 w-full flex items-center justify-center">
+                {isPdfMime(previewInvoice.mimeType) ? (
                   <iframe
                     src={previewUrl}
-                    className="w-full h-[600px]"
+                    className="w-full h-[580px] border-0"
                     title="Invoice Preview"
                   />
                 ) : (
                   <img
                     src={previewUrl}
                     alt="Invoice Preview"
-                    className="w-full h-auto max-h-[600px] object-contain"
+                    className="w-full h-auto max-h-[580px] object-contain p-2"
                   />
                 )}
               </div>
@@ -558,159 +1059,222 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
       <MoveInvoiceDialog
         open={moveInvoiceDialogOpen}
         onOpenChange={setMoveInvoiceDialogOpen}
-        invoice={invoiceToMove}
+        invoice={invoiceToMove as any}
         groups={groups}
-        onSuccess={handleMoveSuccess}
+        onSuccess={() => {
+          fetchInvoices();
+          onInvoiceChange?.();
+        }}
       />
 
-      {/* Send Invoice Dialog */}
+      {/* Send Invoice Modal */}
       <Dialog open={sendInvoiceDialogOpen} onOpenChange={setSendInvoiceDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>Send Invoice via Email</DialogTitle>
-            <DialogDescription>
-              Send {invoiceToSend?.fileName} as an email attachment with customizable headers
-            </DialogDescription>
+        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0 flex flex-row items-center justify-between">
+            <div className="space-y-0.5">
+              <DialogTitle className="text-base font-semibold">Send Invoice via Email</DialogTitle>
+              <DialogDescription className="text-xs">
+                Email {invoiceToSend?.fileName} directly to your client or recipient
+              </DialogDescription>
+            </div>
+            {hasSmtpConfigured ? (
+              <Badge
+                variant="secondary"
+                className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-mono shrink-0 hidden sm:inline-flex"
+              >
+                From: {smtpSenderAddress}
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] shrink-0"
+              >
+                SMTP Not Configured
+              </Badge>
+            )}
           </DialogHeader>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
-            {/* Left Column - Email Form */}
-            <div className="space-y-4">
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium">Email Settings</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="recipientEmail">Recipient Email *</Label>
+
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+            {/* SMTP Not Configured Banner */}
+            {!hasSmtpConfigured && (
+              <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>Custom SMTP Credentials Required</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  To send invoices to clients from your verified address, you must first configure your custom SMTP mail server credentials in your Profile.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs gap-1.5 border-amber-500/30 bg-background hover:bg-muted"
+                  onClick={() => {
+                    setSendInvoiceDialogOpen(false);
+                    router.push("/profile#smtp");
+                  }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Configure SMTP in Profile
+                </Button>
+              </div>
+            )}
+
+            {/* Send Error Alert */}
+            {sendError && (
+              <div className="p-3.5 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive text-xs space-y-2">
+                <div className="flex items-center gap-2 font-medium">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Email Delivery Failed</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-destructive/90">{sendError}</p>
+                {(sendError.toLowerCase().includes("authentication") ||
+                  sendError.toLowerCase().includes("smtp") ||
+                  sendError.toLowerCase().includes("password")) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 bg-background"
+                    onClick={() => {
+                      setSendInvoiceDialogOpen(false);
+                      router.push("/profile#smtp");
+                    }}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Verify Credentials in Profile
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Form */}
+              <div className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <Label htmlFor="recipientEmail" className="text-xs font-medium">Recipient Email *</Label>
                   <Input
                     id="recipientEmail"
                     type="email"
-                    placeholder="recipient@example.com"
+                    placeholder="client@company.com"
                     value={emailData.recipientEmail}
-                    onChange={(e) =>
-                      setEmailData({ ...emailData, recipientEmail: e.target.value })
-                    }
-                    disabled={isSending}
+                    onChange={(e) => setEmailData({ ...emailData, recipientEmail: e.target.value })}
+                    disabled={isSending || !hasSmtpConfigured}
+                    className="h-8 text-xs"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subject">Subject *</Label>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="subject" className="text-xs font-medium">Subject *</Label>
                   <Input
                     id="subject"
-                    placeholder="Invoice: ..."
                     value={emailData.subject}
-                    onChange={(e) =>
-                      setEmailData({ ...emailData, subject: e.target.value })
-                    }
-                    disabled={isSending}
+                    onChange={(e) => setEmailData({ ...emailData, subject: e.target.value })}
+                    disabled={isSending || !hasSmtpConfigured}
+                    className="h-8 text-xs"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="senderName">Sender Name (Optional)</Label>
-                  <Input
-                    id="senderName"
-                    placeholder="Your Company Name"
-                    value={emailData.senderName}
-                    onChange={(e) =>
-                      setEmailData({ ...emailData, senderName: e.target.value })
-                    }
-                    disabled={isSending}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="replyTo">Reply-To Email (Optional)</Label>
-                  <Input
-                    id="replyTo"
-                    type="email"
-                    placeholder="replies@yourdomain.com"
-                    value={emailData.replyTo}
-                    onChange={(e) =>
-                      setEmailData({ ...emailData, replyTo: e.target.value })
-                    }
-                    disabled={isSending}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="message">Message (Optional)</Label>
-                <Textarea
-                  id="message"
-                  placeholder="Enter your message..."
-                  rows={6}
-                  value={emailData.message}
-                  onChange={(e) =>
-                    setEmailData({ ...emailData, message: e.target.value })
-                  }
-                  disabled={isSending}
-                />
-              </div>
-            </div>
 
-            {/* Right Column - Email Preview */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium">Email Preview</h3>
-              <div className="bg-white border rounded-lg p-4 text-sm" style={{borderColor: '#e5e5e5', backgroundColor: '#ffffff'}}>
-                <div className="border-b pb-2 mb-3" style={{borderColor: '#e5e5e5'}}>
-                  <div className="flex justify-between items-start mb-1">
-                    <div>
-                      <div className="font-medium text-gray-900">
-                        {emailData.senderName ? `${emailData.senderName}` : 'InvoiceGen'}
-                        {emailData.recipientEmail && (
-                          <span className="text-gray-500"> &lt;email@address&gt;</span>
-                        )}
-                      </div>
-                      <div className="text-gray-600 text-xs">to: {emailData.recipientEmail || 'recipient@example.com'}</div>
-                    </div>
-                    <div className="text-xs text-gray-500">Just now</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="senderName" className="text-xs font-medium">Sender Name</Label>
+                    <Input
+                      id="senderName"
+                      placeholder="Your Company"
+                      value={emailData.senderName}
+                      onChange={(e) => setEmailData({ ...emailData, senderName: e.target.value })}
+                      disabled={isSending || !hasSmtpConfigured}
+                      className="h-8 text-xs"
+                    />
                   </div>
-                  <div className="font-medium text-gray-900">
-                    {emailData.subject || 'Invoice: [filename]'}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="replyTo" className="text-xs font-medium">Reply-To</Label>
+                    <Input
+                      id="replyTo"
+                      placeholder="billing@company.com"
+                      value={emailData.replyTo}
+                      onChange={(e) => setEmailData({ ...emailData, replyTo: e.target.value })}
+                      disabled={isSending || !hasSmtpConfigured}
+                      className="h-8 text-xs"
+                    />
                   </div>
                 </div>
-                
-                <div className="prose prose-sm max-w-none">
-                  <p className="text-gray-700 whitespace-pre-wrap mb-3">
-                    {emailData.message || 
-                      `Dear recipient,\n\nPlease find attached the invoice ${invoiceToSend?.fileName}.\n\nBest regards`}
-                  </p>
-                  <div className="border rounded p-2 bg-gray-50 flex items-center text-xs text-gray-600">
-                    <div className="bg-gray-200 rounded w-8 h-8 flex items-center justify-center mr-2">
-                      📎
-                    </div>
-                    <div>
-                      <div className="font-medium">{invoiceToSend?.fileName}</div>
-                      <div>{invoiceToSend && Math.round(invoiceToSend.fileSize / 1024)} KB • PDF</div>
-                    </div>
-                  </div>
-                  {emailData.replyTo && (
-                    <div className="mt-2 text-xs text-gray-500">
-                      Reply-To: {emailData.replyTo}
-                    </div>
-                  )}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="message" className="text-xs font-medium">Message</Label>
+                  <Textarea
+                    id="message"
+                    rows={4}
+                    value={emailData.message}
+                    onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+                    disabled={isSending || !hasSmtpConfigured}
+                    className="text-xs"
+                  />
                 </div>
               </div>
-              
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>💡 <strong>Preview:</strong> This shows roughly how your email will appear in Gmail and other email clients.</p>
-                <p>The sender name and reply-to address help recipients identify who sent the invoice.</p>
+
+              {/* Email Preview Card */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Live Email Preview</Label>
+                <div className="border rounded-xl p-3.5 bg-card text-xs space-y-2.5 shadow-xs">
+                  <div className="border-b pb-2 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        {emailData.senderName || (hasSmtpConfigured ? smtpSenderAddress : "InvoiceGen")}
+                      </span>
+                      <span>Just now</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      To: {emailData.recipientEmail || "recipient@example.com"}
+                    </div>
+                    <div className="font-medium text-xs text-foreground pt-0.5">
+                      {emailData.subject || "Invoice: Document"}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    {emailData.message}
+                  </p>
+
+                  <div className="p-2 rounded-lg bg-muted/60 border border-border/40 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-[11px] truncate">{invoiceToSend?.fileName}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono">
+                        {invoiceToSend && formatFileSize(invoiceToSend.fileSize)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="p-4 border-t bg-muted/20 shrink-0 gap-2 sm:gap-0">
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setSendInvoiceDialogOpen(false)}
               disabled={isSending}
+              className="text-xs h-9"
             >
               Cancel
             </Button>
-            <Button onClick={handleSendInvoice} disabled={isSending}>
+            <Button
+              size="sm"
+              onClick={handleSendInvoice}
+              disabled={isSending || !hasSmtpConfigured}
+              className="text-xs h-9 gap-1.5 font-medium shadow-xs"
+            >
               {isSending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Sending Email...
                 </>
               ) : (
                 <>
-                  <Mail className="mr-2 h-4 w-4" />
+                  <Mail className="h-3.5 w-3.5" />
                   Send Invoice
                 </>
               )}
@@ -718,7 +1282,6 @@ export function InvoiceList({ refreshTrigger, currentGroupId, groups = [], onInv
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
-

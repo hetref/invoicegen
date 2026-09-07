@@ -104,17 +104,17 @@ export function RenameGroupDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+      <DialogContent className="rounded-2xl sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Rename Group</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-base font-semibold">Rename Folder</DialogTitle>
+          <DialogDescription className="text-xs">
             Enter a new name for "{group?.name}"
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="new-name">New Name</Label>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="new-name" className="text-xs font-medium">Folder Name</Label>
             <Input
               id="new-name"
               value={name}
@@ -125,27 +125,30 @@ export function RenameGroupDialog({
                 }
               }}
               disabled={isRenaming}
+              className="h-9 text-xs"
               autoFocus
             />
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button
             variant="outline"
+            size="sm"
             onClick={handleClose}
             disabled={isRenaming}
+            className="text-xs h-9"
           >
             Cancel
           </Button>
-          <Button onClick={handleRename} disabled={isRenaming}>
+          <Button size="sm" onClick={handleRename} disabled={isRenaming} className="text-xs h-9">
             {isRenaming ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 Renaming...
               </>
             ) : (
-              "Rename"
+              "Save Changes"
             )}
           </Button>
         </DialogFooter>

@@ -4,7 +4,8 @@ import { headers } from "next/headers";
 import prisma from "@/lib/prisma";
 import { r2Client } from "@/lib/r2-client";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { extractInvoiceData } from "@/lib/gemini-client";
+import { extractInvoiceData } from "@/lib/ai-client";
+import { AiProvider } from "@/lib/ai-config";
 import { sendExtractionCompleteEmail } from "@/lib/email-client";
 
 export async function POST(
@@ -22,12 +23,19 @@ export async function POST(
 
     const { id } = await params;
     
-    // Try to parse body, but handle empty body gracefully
+    // Parse body for AI configuration
     let userApiKey: string | undefined;
+    let provider: AiProvider = "gemini";
+    let model: string | undefined;
+
     try {
       const body = await req.json();
       userApiKey = body.userApiKey;
-    } catch (error) {
+      if (body.provider === "gemini" || body.provider === "groq") {
+        provider = body.provider;
+      }
+      model = body.model;
+    } catch {
       // Body might be empty, that's okay
       userApiKey = undefined;
     }
@@ -47,7 +55,7 @@ export async function POST(
       return NextResponse.json(
         { 
           error: "API key required",
-          message: "You have used your free AI extraction. Please add your Gemini API key in the profile page for unlimited extractions.",
+          message: "You have used your free AI extraction. Please add your Gemini or Groq API key in the Profile page for unlimited extractions.",
         },
         { status: 403 }
       );
@@ -91,23 +99,24 @@ export async function POST(
       });
     }
 
-    // Start background extraction process (don't await)
-    processExtraction(
-      id, 
-      invoice.r2Key, 
-      invoice.mimeType, 
-      session.user.email, 
-      invoice.fileName,
-      userApiKey || process.env.GEMINI_API_KEY || "" // Use user's API key or fallback to env
-    ).catch(
-      (error) => {
-        console.error("Background extraction error:", error);
-      }
-    );
+    // Start background extraction process
+    processExtraction({
+      invoiceId: id,
+      r2Key: invoice.r2Key,
+      mimeType: invoice.mimeType,
+      userEmail: session.user.email,
+      fileName: invoice.fileName,
+      provider,
+      apiKey: userApiKey,
+      model,
+    }).catch((error) => {
+      console.error("Background extraction error:", error);
+    });
 
     return NextResponse.json({
       message: "Extraction started. You will receive an email when complete.",
       status: "processing",
+      provider,
     });
   } catch (error) {
     console.error("Error starting extraction:", error);
@@ -119,16 +128,27 @@ export async function POST(
 }
 
 // Background extraction process
-async function processExtraction(
-  invoiceId: string,
-  r2Key: string,
-  mimeType: string,
-  userEmail: string,
-  fileName: string,
-  apiKey: string
-) {
+async function processExtraction({
+  invoiceId,
+  r2Key,
+  mimeType,
+  userEmail,
+  fileName,
+  provider,
+  apiKey,
+  model,
+}: {
+  invoiceId: string;
+  r2Key: string;
+  mimeType: string;
+  userEmail: string;
+  fileName: string;
+  provider: AiProvider;
+  apiKey?: string;
+  model?: string;
+}) {
   try {
-    console.log(`[Extraction] Starting for invoice ${invoiceId}`);
+    console.log(`[Extraction] Starting for invoice ${invoiceId} using ${provider} (${model || "default"})`);
 
     // Download file from R2
     const command = new GetObjectCommand({
@@ -141,8 +161,14 @@ async function processExtraction(
 
     console.log(`[Extraction] Downloaded file from R2`);
 
-    // Extract data using Gemini with user's API key
-    const extractedData = await extractInvoiceData(fileBuffer, mimeType, apiKey);
+    // Extract data using universal AI client (supports both Gemini and Groq)
+    const extractedData = await extractInvoiceData({
+      fileBuffer,
+      mimeType,
+      provider,
+      apiKey,
+      model,
+    });
 
     console.log(`[Extraction] Data extracted successfully`);
 

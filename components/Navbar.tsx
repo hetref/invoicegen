@@ -68,8 +68,8 @@ const Navbar = ({ session }: { session: Session | null }) => {
                 {isEmailVerified && (
                   <Link href="/dashboard">
                     <Button
-                      variant="ghost"
-                      className="text-gray-700 hover:text-gray-900"
+                      variant={pathname === "/dashboard" ? "secondary" : "ghost"}
+                      className={pathname === "/dashboard" ? "font-semibold" : "text-gray-700 hover:text-gray-900"}
                     >
                       Dashboard
                     </Button>
@@ -79,8 +79,8 @@ const Navbar = ({ session }: { session: Session | null }) => {
                 {/* Always show Profile link */}
                 <Link href="/profile">
                   <Button
-                    variant="ghost"
-                    className="text-gray-700 hover:text-gray-900"
+                    variant={pathname === "/profile" ? "secondary" : "ghost"}
+                    className={pathname === "/profile" ? "font-semibold" : "text-gray-700 hover:text-gray-900"}
                   >
                     Profile
                   </Button>
@@ -191,7 +191,7 @@ const Navbar = ({ session }: { session: Session | null }) => {
                       {isEmailVerified && (
                         <Link href="/dashboard" onClick={() => setOpen(false)}>
                           <Button
-                            variant="ghost"
+                            variant={pathname === "/dashboard" ? "secondary" : "ghost"}
                             className="w-full justify-start text-left"
                           >
                             Dashboard
@@ -202,7 +202,7 @@ const Navbar = ({ session }: { session: Session | null }) => {
                       {/* Always show Profile */}
                       <Link href="/profile" onClick={() => setOpen(false)}>
                         <Button
-                          variant="ghost"
+                          variant={pathname === "/profile" ? "secondary" : "ghost"}
                           className="w-full justify-start text-left"
                         >
                           Profile

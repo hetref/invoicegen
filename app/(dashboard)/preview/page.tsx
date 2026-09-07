@@ -94,9 +94,9 @@ export default function InvoicePreviewPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-gray-600 mb-4">No invoice data found. Please create an invoice first.</p>
-          <Button onClick={() => router.push("/")} className="gap-2">
+          <Button onClick={() => router.push("/new")} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
-            Go to Edit Page
+            Go to Create Invoice
           </Button>
         </div>
       </div>
