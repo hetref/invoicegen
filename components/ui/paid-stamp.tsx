@@ -1,18 +1,34 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 
 interface PaidStampProps {
+  displayName?: string | null;
   date?: string | null;
   size?: "sm" | "md" | "lg";
   className?: string;
   style?: React.CSSProperties;
 }
 
-export function PaidStamp({ date, size = "md", className = "", style = {} }: PaidStampProps) {
+export function PaidStamp({ displayName, date, size = "md", className = "", style = {} }: PaidStampProps) {
   const isLg = size === "lg";
   const isSm = size === "sm";
+
+  // Capitalize display name from profile page
+  const capitalizedName = (displayName || "").trim().toUpperCase();
+
+  // Format date text safely - clean raw ISO timestamp if present
+  let displayDate = (date || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}T/.test(displayDate)) {
+    try {
+      const d = new Date(displayDate);
+      if (!isNaN(d.getTime())) {
+        displayDate = d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      }
+    } catch {
+      // keep
+    }
+  }
 
   return (
     <div
@@ -34,18 +50,18 @@ export function PaidStamp({ date, size = "md", className = "", style = {} }: Pai
         fontFamily: "system-ui, -apple-system, sans-serif",
         textAlign: "center",
         zIndex: 20,
+        maxWidth: isSm ? "160px" : isLg ? "260px" : "210px",
         ...style,
       }}
     >
-      {/* Top Banner: DevAlly Emblem */}
+      {/* Top Banner: Capitalized Display Name from Profile */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "4px",
           fontSize: isSm ? "8px" : isLg ? "11px" : "9px",
           fontWeight: 700,
-          letterSpacing: "0.15em",
+          letterSpacing: "0.14em",
           textTransform: "uppercase",
           color: "#059669",
           borderBottom: "1px solid rgba(5, 150, 105, 0.4)",
@@ -53,23 +69,12 @@ export function PaidStamp({ date, size = "md", className = "", style = {} }: Pai
           marginBottom: "3px",
           width: "100%",
           justifyContent: "center",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
-        <svg
-          width={isSm ? "10" : "12"}
-          height={isSm ? "10" : "12"}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 2L2 7l10 5 10-5-10-5z" />
-          <path d="M2 17l10 5 10-5" />
-          <path d="M2 12l10 5 10-5" />
-        </svg>
-        <span>DevAlly VERIFIED</span>
+        <span>{capitalizedName || "VERIFIED"}</span>
       </div>
 
       {/* Main Center Text */}
@@ -88,12 +93,12 @@ export function PaidStamp({ date, size = "md", className = "", style = {} }: Pai
         PAID
       </div>
 
-      {/* Bottom Subtitle: Date / Settlement */}
+      {/* Bottom Subtitle: Settled Date with Invoice Date */}
       <div
         style={{
           fontSize: isSm ? "7px" : isLg ? "10px" : "8px",
           fontWeight: 600,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.08em",
           textTransform: "uppercase",
           color: "#059669",
           borderTop: "1px solid rgba(5, 150, 105, 0.4)",
@@ -101,10 +106,14 @@ export function PaidStamp({ date, size = "md", className = "", style = {} }: Pai
           marginTop: "3px",
           width: "100%",
           justifyContent: "center",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
-        {date ? `SETTLED • ${date}` : "SETTLED IN FULL"}
+        {displayDate ? `SETTLED • ${displayDate}` : "SETTLED IN FULL"}
       </div>
     </div>
   );
 }
+

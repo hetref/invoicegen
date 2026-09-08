@@ -63,6 +63,19 @@ export default function InvoicePreviewPage() {
   const invoiceRef = useRef<HTMLDivElement>(null)
   const [groupId, setGroupId] = useState<string | null>(null)
   const [invoiceId, setInvoiceId] = useState<string | null>(null)
+  const [profileName, setProfileName] = useState<string>("")
+
+  // Prefetch profile logo and display name
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.name) {
+          setProfileName(data.user.name)
+        }
+      })
+      .catch((e) => console.warn("Could not fetch profile:", e))
+  }, [])
 
   // Prefetch profile logo as base64 for reliable, zero-CORS canvas and PDF generation
   useEffect(() => {
@@ -393,7 +406,7 @@ export default function InvoicePreviewPage() {
     const pages: InvoiceItem[][] = []
     let currentPage: InvoiceItem[] = []
     let currentPageHeight = 0
-    
+
     // Available heights in pixels (approximate)
     const A4_HEIGHT = 1122 // 297mm in pixels at 96dpi
     const PADDING = 96 // 48px top + 48px bottom
@@ -406,23 +419,23 @@ export default function InvoicePreviewPage() {
     const TABLE_HEADER = 35 // Table header height (reduced)
     const ROW_BASE_HEIGHT = 35 // Minimum row height (reduced)
     const THANK_YOU = 40 // Thank you section (reduced)
-    
+
     invoiceData.items.forEach((item, index) => {
       // Estimate row height based on description length
       // Approximate: 50 characters per line, 20px per line
       const descriptionLines = Math.ceil(item.description.length / 60)
       const estimatedRowHeight = Math.max(ROW_BASE_HEIGHT, descriptionLines * 24 + 20)
-      
+
       // Calculate available height for current page
       const isFirstPage = pages.length === 0 && currentPage.length === 0
       const pageHeaderHeight = isFirstPage ? HEADER_HEIGHT : CONTINUATION_HEADER
-      
+
       // Check if this is potentially the last item
       const isLastItem = index === invoiceData.items.length - 1
       const lastPageExtras = isLastItem ? (TOTAL_SECTION + PAYMENT_DETAILS + THANK_YOU) : 0
-      
+
       const availableHeight = A4_HEIGHT - PADDING - pageHeaderHeight - FOOTER_HEIGHT - TABLE_HEADER - lastPageExtras
-      
+
       // Check if item fits on current page
       if (currentPageHeight + estimatedRowHeight <= availableHeight && currentPage.length < 15) {
         currentPage.push(item)
@@ -436,16 +449,16 @@ export default function InvoicePreviewPage() {
         currentPageHeight = estimatedRowHeight
       }
     })
-    
+
     // Add remaining items
     if (currentPage.length > 0) {
       pages.push(currentPage)
     }
-    
+
     // Ensure we have at least one page
     return pages.length > 0 ? pages : [[]]
   }
-  
+
   const pages = calculatePages()
 
   return (
@@ -453,9 +466,9 @@ export default function InvoicePreviewPage() {
       {/* Action Buttons */}
       <div className="sticky top-0 z-50 bg-white border-b border-gray-300">
         <div className="max-w-[210mm] mx-auto px-4 py-3 flex justify-between items-center">
-          <Button 
-            onClick={handleBack} 
-            variant="outline" 
+          <Button
+            onClick={handleBack}
+            variant="outline"
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -486,27 +499,26 @@ export default function InvoicePreviewPage() {
                 setInvoiceData(updated);
                 localStorage.setItem("invoiceData", JSON.stringify(updated));
                 toast({
-                  title: nextPaid ? "DevAlly PAID Stamp Applied! 🎉" : "Marked as Unpaid",
+                  title: nextPaid ? "PAID Stamp Applied! 🎉" : "Marked as Unpaid",
                   description: nextPaid
-                    ? "Translucent DevAlly verified PAID stamp stamped on invoice preview."
+                    ? "PAID stamp applied on invoice preview."
                     : "Invoice status updated to unpaid.",
                 });
               }}
               variant="outline"
-              className={`gap-1.5 text-xs transition-all ${
-                (invoiceData.isPaid || invoiceData.paymentDetails?.isPaid)
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 font-semibold"
-                  : "text-neutral-700 hover:bg-neutral-50"
-              }`}
+              className={`gap-1.5 text-xs transition-all ${(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid)
+                ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 font-semibold"
+                : "text-neutral-700 hover:bg-neutral-50"
+                }`}
             >
               <CheckCircle2 className={`h-4 w-4 ${(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid) ? "text-emerald-600" : "text-neutral-400"}`} />
               <span>{(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid) ? "PAID Stamp (Active)" : "Mark as Paid"}</span>
             </Button>
 
-            <Button 
-              onClick={handlePrint} 
-              disabled={isGenerating || isSaving} 
-              variant="outline" 
+            <Button
+              onClick={handlePrint}
+              disabled={isGenerating || isSaving}
+              variant="outline"
               className="gap-2"
             >
               {isGenerating ? (
@@ -521,9 +533,9 @@ export default function InvoicePreviewPage() {
                 </>
               )}
             </Button>
-            <Button 
-              onClick={handleSave} 
-              disabled={isGenerating || isSaving} 
+            <Button
+              onClick={handleSave}
+              disabled={isGenerating || isSaving}
               className="gap-2"
             >
               {isSaving ? (
@@ -566,7 +578,7 @@ export default function InvoicePreviewPage() {
                 {isFirstPage && (
                   <>
                     <div style={{ position: "relative", marginBottom: "20px", paddingBottom: "12px", borderBottom: "2px solid #000000" }}>
-                      {/* Translucent DevAlly Verified Paid Stamp */}
+                      {/* Translucent Verified Paid Stamp */}
                       {Boolean(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid) && (
                         <div
                           data-paid-stamp="true"
@@ -578,7 +590,8 @@ export default function InvoicePreviewPage() {
                           }}
                         >
                           <PaidStamp
-                            date={invoiceData.paidAt || invoiceData.paymentDetails?.paidAt}
+                            displayName={profileName || invoiceData.paymentTo?.name}
+                            date={invoiceData.date}
                             size="md"
                           />
                         </div>
@@ -682,9 +695,9 @@ export default function InvoicePreviewPage() {
                     </thead>
                     <tbody>
                       {pageItems.map((item, idx) => (
-                        <tr 
-                          key={item.no} 
-                          style={{ 
+                        <tr
+                          key={item.no}
+                          style={{
                             borderBottom: "1px solid #dddddd"
                           }}
                         >
@@ -713,7 +726,7 @@ export default function InvoicePreviewPage() {
                     <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end" }}>
                       <div style={{ width: "240px" }}>
                         <div
-                          style={{ 
+                          style={{
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",

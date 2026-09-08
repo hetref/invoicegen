@@ -213,7 +213,7 @@ export function InvoiceList({
       toast({
         title: nextPaid ? "Invoice Paid" : "Invoice Unmarked",
         description: nextPaid
-          ? `${invoice.fileName} marked as Paid with DevAlly verified stamp.`
+          ? `${invoice.fileName} marked as Paid.`
           : `${invoice.fileName} marked as unpaid.`,
       });
     } catch (err) {

@@ -1,9 +1,18 @@
 import { PDFDocument, rgb, degrees, StandardFonts } from "pdf-lib";
 
 export interface StampOptions {
-  pdfBuffer: Buffer;
+  pdfBuffer: Uint8Array | Buffer<any> | ArrayBuffer;
+  displayName?: string | null;
+  invoiceDate?: string | null;
   paidAt?: string | null;
   stampAllPages?: boolean;
+}
+
+/**
+ * Sanitizes strings for standard PDF Helvetica font (Latin-1/WinAnsi encoding safe).
+ */
+function sanitizePdfText(str: string): string {
+  return str.replace(/[^\x20-\x7E\xA0-\xFF]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -26,11 +35,15 @@ function rotatePoint(
 }
 
 /**
- * Stamps an authentic, translucent DevAlly Verified PAID stamp onto a PDF document.
+ * Stamps an authentic, translucent PAID stamp onto a PDF document.
+ * Displays the user's capitalized display name from /profile, PAID in center,
+ * and the exact invoice date for SETTLED.
  * Returns the modified PDF as a Buffer.
  */
 export async function stampPdfWithPaid({
   pdfBuffer,
+  displayName,
+  invoiceDate,
   paidAt,
   stampAllPages = false,
 }: StampOptions): Promise<Buffer> {
@@ -38,14 +51,14 @@ export async function stampPdfWithPaid({
   const pages = pdfDoc.getPages();
 
   if (pages.length === 0) {
-    return pdfBuffer;
+    return pdfBuffer as any;
   }
 
   // Embed standard Helvetica fonts
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  // Palette: DevAlly verified emerald theme
+  // Palette: Verified emerald theme
   const strokeColor = rgb(4 / 255, 120 / 255, 87 / 255); // #047857
   const fillColor = rgb(16 / 255, 185 / 255, 129 / 255); // #10B981
   const textColor = rgb(5 / 255, 150 / 255, 105 / 255); // #059669
@@ -57,20 +70,26 @@ export async function stampPdfWithPaid({
   const stampHeight = 66;
   const angle = -12; // tilted stamp look
 
-  // Format date text safely
-  let dateText = "SETTLED IN FULL";
-  if (paidAt) {
+  // Format top display name (capitalized from /profile)
+  const cleanDisplayName = sanitizePdfText((displayName || "").trim().toUpperCase());
+  const topText = cleanDisplayName || "VERIFIED";
+
+  // Format date text safely using the invoice date
+  let rawDate = sanitizePdfText((invoiceDate || "").trim());
+  if (!rawDate && paidAt) {
+    rawDate = sanitizePdfText(paidAt.trim());
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(rawDate)) {
     try {
-      const d = new Date(paidAt);
+      const d = new Date(rawDate);
       if (!isNaN(d.getTime())) {
-        dateText = `SETTLED • ${d.toLocaleDateString()}`;
-      } else {
-        dateText = `SETTLED • ${paidAt}`;
+        rawDate = d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
       }
     } catch {
-      dateText = `SETTLED • ${paidAt}`;
+      // keep
     }
   }
+  const dateText = rawDate ? `SETTLED • ${rawDate}` : "SETTLED IN FULL";
 
   // Apply stamp to first page (or all pages if requested)
   const targetPages = stampAllPages ? pages : [pages[0]];
@@ -105,7 +124,7 @@ export async function stampPdfWithPaid({
       borderOpacity: stampOpacity,
     });
 
-    // 3. Inner border (inset by 3 pt)
+    // 3. Inner border (inset by 3.5 pt)
     const inset = 3.5;
     const innerOrigin = rotatePoint(originX, originY, inset, inset, angle);
     page.drawRectangle({
@@ -131,9 +150,11 @@ export async function stampPdfWithPaid({
       opacity: stampOpacity,
     });
 
-    // 5. Top Banner Text: DevAlly VERIFIED
-    const topText = "DevAlly  VERIFIED";
-    const topFontSize = 7.5;
+    // 5. Top Banner Text: Capitalized Profile Display Name
+    let topFontSize = 8;
+    while (topFontSize > 4.5 && fontBold.widthOfTextAtSize(topText, topFontSize) > stampWidth - 14) {
+      topFontSize -= 0.5;
+    }
     const topTextWidth = fontBold.widthOfTextAtSize(topText, topFontSize);
     const topTextLocalX = (stampWidth - topTextWidth) / 2;
     const topTextLocalY = stampHeight - 12.5;
@@ -177,8 +198,11 @@ export async function stampPdfWithPaid({
       opacity: stampOpacity,
     });
 
-    // 8. Bottom Date/Settled Text
-    const botFontSize = 6.5;
+    // 8. Bottom Date/Settled Text: Invoice Date
+    let botFontSize = 6.5;
+    while (botFontSize > 4 && fontBold.widthOfTextAtSize(dateText, botFontSize) > stampWidth - 14) {
+      botFontSize -= 0.5;
+    }
     const botTextWidth = fontBold.widthOfTextAtSize(dateText, botFontSize);
     const botTextLocalX = (stampWidth - botTextWidth) / 2;
     const botTextLocalY = 7;

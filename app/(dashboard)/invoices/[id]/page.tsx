@@ -82,6 +82,7 @@ export default function SingleInvoicePage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ hasUsedFreeExtraction: boolean } | null>(null);
+  const [profileName, setProfileName] = useState<string>("");
   const [hasApiKey, setHasApiKey] = useState(false);
   const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
   const [dbAiConfig, setDbAiConfig] = useState<{
@@ -141,6 +142,9 @@ export default function SingleInvoicePage() {
 
       const data = await response.json();
       setUserProfile({ hasUsedFreeExtraction: data.user.hasUsedFreeExtraction });
+      if (data.user?.name) {
+        setProfileName(data.user.name);
+      }
 
       if (data.aiConfig) {
         setDbAiConfig(data.aiConfig);
@@ -317,9 +321,9 @@ export default function SingleInvoicePage() {
       if (!res.ok) throw new Error("Failed to update status");
 
       toast({
-        title: nextPaid ? "DevAlly PAID Stamp Applied! 🎉" : "Marked as Unpaid",
+        title: nextPaid ? "PAID Stamp Applied! 🎉" : "Marked as Unpaid",
         description: nextPaid
-          ? `${invoice.fileName} is now stamped with DevAlly verified PAID status.`
+          ? `${invoice.fileName} is now stamped with PAID status.`
           : `${invoice.fileName} marked as unpaid.`,
       });
 
@@ -509,7 +513,7 @@ export default function SingleInvoicePage() {
               {invoice.isPaid ? (
                 <>
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>Paid (DevAlly)</span>
+                  <span>Paid</span>
                 </>
               ) : (
                 <>
@@ -685,11 +689,12 @@ export default function SingleInvoicePage() {
                   </a>
                 </CardHeader>
                 <CardContent className="p-2 sm:p-3 bg-neutral-100/50 relative">
-                  {/* Translucent DevAlly Verified Paid Stamp Overlay for image files (PDFs have stamp embedded directly inside the document) */}
+                  {/* Translucent Paid Stamp Overlay for image files (PDFs have stamp embedded directly inside the document) */}
                   {!isPdf && invoice.isPaid && (
                     <div className="absolute top-5 right-5 z-20 pointer-events-none drop-shadow-md">
                       <PaidStamp
-                        date={formatPaidDate(invoice.paidAt)}
+                        displayName={profileName || invoice.paymentToName}
+                        date={invoice.invoiceDate || formatPaidDate(invoice.paidAt)}
                         size="md"
                       />
                     </div>

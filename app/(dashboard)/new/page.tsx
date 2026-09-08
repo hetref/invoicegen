@@ -64,6 +64,7 @@ export default function EditInvoicePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [profileLogoUrl, setProfileLogoUrl] = useState<string | null>(null)
   const [hasProfileLogo, setHasProfileLogo] = useState(false)
+  const [profileName, setProfileName] = useState<string>("")
 
   const groupId = searchParams.get("groupId")
   const invoiceId = searchParams.get("invoiceId")
@@ -101,6 +102,8 @@ export default function EditInvoicePage() {
       accountType: "",
       branch: "",
       upi: "",
+      isPaid: false,
+      paidAt: null,
     },
     contact: {
       phone: "",
@@ -119,6 +122,9 @@ export default function EditInvoicePage() {
         const profRes = await fetch("/api/profile")
         if (profRes.ok) {
           const profData = await profRes.json()
+          if (profData.user?.name) {
+            setProfileName(profData.user.name)
+          }
           const logo =
             profData.user?.logoUrl ||
             (profData.user?.image
@@ -622,7 +628,7 @@ export default function EditInvoicePage() {
                 />
               </div>
 
-              {/* DevAlly Verified Paid Status Toggle */}
+              {/* Verified Paid Status Toggle */}
               <div className="pt-3 border-t border-border/60">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-neutral-50/80 dark:bg-neutral-900/50 border border-neutral-200/80 dark:border-neutral-800">
                   <div className="flex items-start space-x-3">
@@ -648,9 +654,9 @@ export default function EditInvoicePage() {
                           },
                         }))
                         toast({
-                          title: val ? "DevAlly PAID Stamp Enabled! 🎉" : "Marked as Unpaid",
+                          title: val ? "PAID Stamp Enabled! 🎉" : "Marked as Unpaid",
                           description: val
-                            ? "Translucent DevAlly verified PAID stamp will appear on the invoice."
+                            ? "PAID stamp will appear on the invoice."
                             : "Invoice marked as pending / unpaid.",
                         })
                       }}
@@ -661,19 +667,23 @@ export default function EditInvoicePage() {
                         <span>Mark Invoice as Settled / Paid</span>
                         {invoiceData.isPaid && (
                           <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] font-semibold">
-                            DevAlly Verified
+                            Paid
                           </Badge>
                         )}
                       </Label>
                       <p className="text-xs text-neutral-500">
-                        Applies a translucent DevAlly verified PAID stamp across your invoice and PDF download.
+                        Applies a translucent PAID stamp across your invoice and PDF download.
                       </p>
                     </div>
                   </div>
 
                   {invoiceData.isPaid && (
                     <div className="self-center sm:self-auto shrink-0 animate-in fade-in zoom-in-95 duration-200">
-                      <PaidStamp date={invoiceData.paidAt || undefined} size="sm" />
+                      <PaidStamp
+                        displayName={profileName || invoiceData.paymentTo.name}
+                        date={invoiceData.date}
+                        size="sm"
+                      />
                     </div>
                   )}
                 </div>

@@ -33,6 +33,13 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Get user profile display name from database or session fallback
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { name: true },
+    });
+    const displayName = user?.name || session.user?.name;
+
     // Download original file buffer from R2
     const s3Response = await getObjectFromR2(invoice.r2Key);
     if (!s3Response.Body) {
@@ -40,17 +47,19 @@ export async function GET(
     }
 
     const byteArray = await s3Response.Body.transformToByteArray();
-    let fileBuffer = Buffer.from(byteArray);
+    let fileBuffer: Buffer = Buffer.from(byteArray.buffer, byteArray.byteOffset, byteArray.byteLength);
 
     const isPaid = Boolean((invoice.paymentDetails as any)?.isPaid);
     const paidAt = (invoice.paymentDetails as any)?.paidAt;
     const isPdf = invoice.mimeType === "application/pdf" || invoice.fileName.toLowerCase().endsWith(".pdf");
 
-    // If invoice is marked as PAID and document is a PDF, stamp the DevAlly verified stamp onto the PDF document itself
+    // If invoice is marked as PAID and document is a PDF, stamp the verified stamp onto the PDF document itself
     if (isPaid && isPdf) {
       try {
         fileBuffer = await stampPdfWithPaid({
           pdfBuffer: fileBuffer,
+          displayName,
+          invoiceDate: invoice.invoiceDate,
           paidAt,
         });
       } catch (stampErr) {
@@ -62,7 +71,7 @@ export async function GET(
     const isDownload = req.nextUrl.searchParams.get("download") === "1";
     const fileName = invoice.fileName || `Invoice-${invoice.invoiceNumber || invoice.id}.pdf`;
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       status: 200,
       headers: {
         "Content-Type": invoice.mimeType || "application/pdf",
