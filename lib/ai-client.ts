@@ -184,7 +184,7 @@ function extractTextFromPdfRawStreams(pdfBuffer: Buffer): string {
           const streamText = decompressed.toString("latin1");
 
           // Extract TJ kerning arrays: [(Text1) 120 (Text2)] TJ
-          const tjRegex = /\[(.*?)\]\s*TJ/gs;
+          const tjRegex = /\[([\s\S]*?)\]\s*TJ/g;
           let tjMatch;
           while ((tjMatch = tjRegex.exec(streamText)) !== null) {
             const inner = tjMatch[1];
