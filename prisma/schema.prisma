@@ -23,6 +23,13 @@ model User {
   // AI Extraction tracking
   hasUsedFreeExtraction Boolean @default(false)
 
+  // AI Extraction configuration
+  aiProvider     String?   @default("gemini")
+  geminiApiKey   String?
+  geminiModel    String?   @default("gemini-2.5-flash")
+  groqApiKey     String?
+  groqModel      String?   @default("llama-3.3-70b-versatile")
+
   // Storage and usage limits (in bytes, default 40MB = 41943040)
   storageLimit  BigInt    @default(41943040)
   maxInvoices   Int?      @default(100)

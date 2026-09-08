@@ -84,3 +84,36 @@ export async function listObjectsInR2(prefix: string) {
   return response.Contents || [];
 }
 
+/**
+ * Upload a raw buffer to R2
+ * @param key - The S3 key (path) where the file will be stored
+ * @param buffer - File buffer
+ * @param contentType - MIME type of the file
+ */
+export async function uploadBufferToR2(
+  key: string,
+  buffer: Buffer | Uint8Array,
+  contentType: string
+): Promise<void> {
+  const command = new PutObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  });
+
+  await r2Client.send(command);
+}
+
+/**
+ * Get an object stream and metadata directly from R2
+ * @param key - The S3 key (path) of the file
+ */
+export async function getObjectFromR2(key: string) {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+  });
+
+  return await r2Client.send(command);
+}

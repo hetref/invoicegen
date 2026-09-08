@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,11 +27,14 @@ import {
   AlertCircle,
   ShieldCheck,
   Zap,
+  Camera,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { AiExtractionSettings } from "@/components/profile/ai-settings";
 import { SmtpSettings } from "@/components/profile/smtp-settings";
+import { LogoSettings } from "@/components/profile/logo-settings";
 
 interface UserProfile {
   id: string;
@@ -39,6 +42,8 @@ interface UserProfile {
   email: string;
   emailVerified: boolean;
   image: string | null;
+  logoUrl?: string | null;
+  hasLogo?: boolean;
   createdAt: string;
   lastLoginMethod: string | null;
   hasUsedFreeExtraction: boolean;
@@ -68,6 +73,8 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [editedName, setEditedName] = useState("");
   const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -94,6 +101,73 @@ export default function ProfilePage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDirectLogoUpload = async (file: File) => {
+    if (!file) return;
+    try {
+      setIsUploadingAvatar(true);
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/profile/logo", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to upload logo");
+      }
+
+      const data = await response.json();
+      const newUrl = data.logoUrl || `/api/profile/logo?v=${Date.now()}`;
+      setUser((prev) => (prev ? { ...prev, image: newUrl, logoUrl: newUrl } : null));
+
+      toast({
+        title: "Logo Saved",
+        description: "Your logo is saved to AWS S3 storage and will appear on your invoices.",
+      });
+    } catch (error: any) {
+      console.error("Error uploading logo:", error);
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload logo",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
+
+  const handleDirectLogoDelete = async () => {
+    try {
+      setIsUploadingAvatar(true);
+      const response = await fetch("/api/profile/logo", {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to delete logo");
+      }
+
+      setUser((prev) => (prev ? { ...prev, image: null, logoUrl: null } : null));
+      toast({
+        title: "Logo Removed",
+        description: "Brand logo has been removed from cloud storage.",
+      });
+    } catch (error: any) {
+      console.error("Error deleting logo:", error);
+      toast({
+        title: "Deletion Failed",
+        description: error.message || "Failed to remove logo",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -303,34 +377,97 @@ export default function ProfilePage() {
 
               <CardContent className="p-4 sm:p-6 space-y-5">
                 {/* Avatar and Identity */}
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16 border-2 border-border">
-                    <AvatarImage src={user.image || undefined} alt={user.name} />
-                    <AvatarFallback className="text-base font-semibold bg-muted text-foreground">
-                      {getInitials(user.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-1">
-                    <h3 className="font-semibold text-sm text-foreground">{user.name}</h3>
-                    <p className="text-xs text-muted-foreground font-mono">{user.email}</p>
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      {user.emailVerified ? (
-                        <Badge
-                          variant="secondary"
-                          className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] px-1.5 py-0"
-                        >
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Verified
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0"
-                        >
-                          Unverified
-                        </Badge>
-                      )}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    {/* Interactive Avatar with upload trigger */}
+                    <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
+                      <Avatar className="h-16 w-16 border-2 border-border shadow-xs">
+                        <AvatarImage
+                          src={
+                            user.image
+                              ? user.image.startsWith("http://") || user.image.startsWith("https://")
+                                ? user.image
+                                : "/api/profile/logo"
+                              : undefined
+                          }
+                          alt={user.name}
+                        />
+                        <AvatarFallback className="text-base font-semibold bg-muted text-foreground">
+                          {getInitials(user.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <Camera className="h-5 w-5" />
+                      </div>
                     </div>
+
+                    <div className="space-y-1">
+                      <h3 className="font-semibold text-sm text-foreground">{user.name}</h3>
+                      <p className="text-xs text-muted-foreground font-mono">{user.email}</p>
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        {user.emailVerified ? (
+                          <Badge
+                            variant="secondary"
+                            className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] px-1.5 py-0"
+                          >
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Verified
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] px-1.5 py-0"
+                          >
+                            Unverified
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Upload / Manage Logo Buttons directly in Personal Information */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleDirectLogoUpload(e.target.files[0]);
+                        }
+                      }}
+                      disabled={isUploadingAvatar}
+                    />
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={isUploadingAvatar}
+                      className="h-8 text-xs gap-1.5 shadow-2xs"
+                    >
+                      {isUploadingAvatar ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="h-3.5 w-3.5" />
+                      )}
+                      <span>{user.image ? "Change Logo" : "Upload Logo"}</span>
+                    </Button>
+
+                    {user.image && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleDirectLogoDelete}
+                        disabled={isUploadingAvatar}
+                        className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -430,6 +567,14 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Brand & Company Logo Card */}
+            <LogoSettings
+              currentLogoUrl={user.logoUrl || (user.image ? (user.image.startsWith("http") ? user.image : "/api/profile/logo") : null)}
+              onLogoUpdated={(newUrl) => {
+                setUser((prev) => (prev ? { ...prev, logoUrl: newUrl, image: newUrl } : null));
+              }}
+            />
 
             {/* AI Intelligence Provider & Model Selector */}
             <AiExtractionSettings />

@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Download, ArrowLeft, Save, Loader2 } from "lucide-react"
+import { Download, ArrowLeft, Save, Loader2, CheckCircle2 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import jsPDF from "jspdf"
 import html2canvas from "html2canvas"
 import { useToast } from "@/hooks/use-toast"
+import { PaidStamp } from "@/components/ui/paid-stamp"
+import { firePaidCelebration } from "@/lib/confetti"
 
 interface InvoiceItem {
   no: number
@@ -19,6 +21,10 @@ interface InvoiceItem {
 interface InvoiceData {
   date: string
   invoiceNo: string
+  includeLogo?: boolean
+  logoUrl?: string | null
+  isPaid?: boolean
+  paidAt?: string | null
   billedTo: {
     name: string
     address: string
@@ -35,6 +41,8 @@ interface InvoiceData {
     accountType: string
     branch: string
     upi: string
+    isPaid?: boolean
+    paidAt?: string | null
   }
   contact: {
     phone: string
@@ -51,9 +59,33 @@ export default function InvoicePreviewPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [logoBase64, setLogoBase64] = useState<string | null>(null)
   const invoiceRef = useRef<HTMLDivElement>(null)
   const [groupId, setGroupId] = useState<string | null>(null)
   const [invoiceId, setInvoiceId] = useState<string | null>(null)
+
+  // Prefetch profile logo as base64 for reliable, zero-CORS canvas and PDF generation
+  useEffect(() => {
+    const fetchLogoBase64 = async () => {
+      try {
+        const res = await fetch("/api/profile/logo")
+        if (res.ok) {
+          const blob = await res.blob()
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            if (typeof reader.result === "string") {
+              setLogoBase64(reader.result)
+            }
+          }
+          reader.readAsDataURL(blob)
+        }
+      } catch (e) {
+        console.warn("Could not prefetch profile logo:", e)
+      }
+    }
+
+    fetchLogoBase64()
+  }, [])
 
   useEffect(() => {
     // Set groupId and invoiceId from searchParams or localStorage
@@ -132,12 +164,15 @@ export default function InvoicePreviewPage() {
           const htmlEl = el as HTMLElement
           originalStyles.push({ element: htmlEl, style: htmlEl.getAttribute("style") || "" })
 
+          // Preserve all styling on DevAlly Paid Stamp elements
+          if (htmlEl.closest("[data-paid-stamp]")) {
+            return;
+          }
+
           const computedStyle = window.getComputedStyle(htmlEl)
           const bgColor = computedStyle.backgroundColor
           const color = computedStyle.color
           const borderColor = computedStyle.borderColor
-
-          console.log("COLORS", bgColor, color, borderColor)
 
           // Apply standard colors as inline styles
           if (bgColor && bgColor !== "rgba(0, 0, 0, 0)") {
@@ -223,19 +258,24 @@ export default function InvoicePreviewPage() {
           const htmlEl = el as HTMLElement
           originalStyles.push({ element: htmlEl, style: htmlEl.getAttribute("style") || "" })
 
+          // Preserve all styling on DevAlly Paid Stamp elements
+          if (htmlEl.closest("[data-paid-stamp]")) {
+            return;
+          }
+
           const computedStyle = window.getComputedStyle(htmlEl)
           const bgColor = computedStyle.backgroundColor
           const color = computedStyle.color
           const borderColor = computedStyle.borderColor
 
           if (bgColor && bgColor !== "rgba(0, 0, 0, 0)") {
-            htmlEl.style.backgroundColor = "#ffffff"
+            htmlEl.style.backgroundColor = bgColor.includes("oklch") ? "#ffffff" : bgColor
           }
           if (color) {
-            htmlEl.style.color = "#000000"
+            htmlEl.style.color = color.includes("oklch") ? "#000000" : color
           }
           if (borderColor) {
-            htmlEl.style.borderColor = "#e5e7eb"
+            htmlEl.style.borderColor = borderColor.includes("oklch") ? "#e5e7eb" : borderColor
           }
         })
 
@@ -357,7 +397,8 @@ export default function InvoicePreviewPage() {
     // Available heights in pixels (approximate)
     const A4_HEIGHT = 1122 // 297mm in pixels at 96dpi
     const PADDING = 96 // 48px top + 48px bottom
-    const HEADER_HEIGHT = 150 // Header section on first page (reduced)
+    const hasLogo = Boolean(invoiceData.includeLogo && (logoBase64 || invoiceData.logoUrl))
+    const HEADER_HEIGHT = hasLogo ? 200 : 150 // Header section on first page
     const FOOTER_HEIGHT = 50 // Footer (reduced)
     const CONTINUATION_HEADER = 65 // Continuation header on subsequent pages (reduced)
     const TOTAL_SECTION = 60 // Total amount section (reduced)
@@ -420,7 +461,48 @@ export default function InvoicePreviewPage() {
             <ArrowLeft className="h-4 w-4" />
             Back to Edit
           </Button>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* Interactive Paid Toggle */}
+            <Button
+              onClick={() => {
+                const isCurrentlyPaid = Boolean(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid);
+                const nextPaid = !isCurrentlyPaid;
+                if (nextPaid) {
+                  firePaidCelebration();
+                }
+                const updatedPaidAt = nextPaid
+                  ? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                  : null;
+                const updated = {
+                  ...invoiceData,
+                  isPaid: nextPaid,
+                  paidAt: updatedPaidAt,
+                  paymentDetails: {
+                    ...invoiceData.paymentDetails,
+                    isPaid: nextPaid,
+                    paidAt: updatedPaidAt,
+                  },
+                };
+                setInvoiceData(updated);
+                localStorage.setItem("invoiceData", JSON.stringify(updated));
+                toast({
+                  title: nextPaid ? "DevAlly PAID Stamp Applied! 🎉" : "Marked as Unpaid",
+                  description: nextPaid
+                    ? "Translucent DevAlly verified PAID stamp stamped on invoice preview."
+                    : "Invoice status updated to unpaid.",
+                });
+              }}
+              variant="outline"
+              className={`gap-1.5 text-xs transition-all ${
+                (invoiceData.isPaid || invoiceData.paymentDetails?.isPaid)
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 font-semibold"
+                  : "text-neutral-700 hover:bg-neutral-50"
+              }`}
+            >
+              <CheckCircle2 className={`h-4 w-4 ${(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid) ? "text-emerald-600" : "text-neutral-400"}`} />
+              <span>{(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid) ? "PAID Stamp (Active)" : "Mark as Paid"}</span>
+            </Button>
+
             <Button 
               onClick={handlePrint} 
               disabled={isGenerating || isSaving} 
@@ -483,11 +565,46 @@ export default function InvoicePreviewPage() {
                 {/* Header - Only on first page */}
                 {isFirstPage && (
                   <>
-                    <div style={{ marginBottom: "20px", paddingBottom: "12px", borderBottom: "2px solid #000000" }}>
+                    <div style={{ position: "relative", marginBottom: "20px", paddingBottom: "12px", borderBottom: "2px solid #000000" }}>
+                      {/* Translucent DevAlly Verified Paid Stamp */}
+                      {Boolean(invoiceData.isPaid || invoiceData.paymentDetails?.isPaid) && (
+                        <div
+                          data-paid-stamp="true"
+                          style={{
+                            position: "absolute",
+                            top: "-4px",
+                            right: "125px",
+                            zIndex: 20,
+                          }}
+                        >
+                          <PaidStamp
+                            date={invoiceData.paidAt || invoiceData.paymentDetails?.paidAt}
+                            size="md"
+                          />
+                        </div>
+                      )}
+
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
-                        <h1 style={{ fontSize: "28px", fontWeight: "bold", color: "#000000", margin: "0", lineHeight: "1.2" }}>
-                          INVOICE
-                        </h1>
+                        <div>
+                          {invoiceData.includeLogo && (logoBase64 || invoiceData.logoUrl) && (
+                            <div style={{ marginBottom: "10px" }}>
+                              <img
+                                src={logoBase64 || invoiceData.logoUrl || "/api/profile/logo"}
+                                alt="Company Logo"
+                                crossOrigin="anonymous"
+                                style={{
+                                  maxHeight: "48px",
+                                  maxWidth: "180px",
+                                  objectFit: "contain",
+                                  display: "block",
+                                }}
+                              />
+                            </div>
+                          )}
+                          <h1 style={{ fontSize: "28px", fontWeight: "bold", color: "#000000", margin: "0", lineHeight: "1.2" }}>
+                            INVOICE
+                          </h1>
+                        </div>
                         <div style={{ textAlign: "right" }}>
                           <p style={{ fontSize: "10px", color: "#666666", margin: "0" }}>
                             Invoice Number

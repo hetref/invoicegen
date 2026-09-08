@@ -6,7 +6,6 @@ import { r2Client } from "@/lib/r2-client";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { extractInvoiceData } from "@/lib/ai-client";
 import { AiProvider } from "@/lib/ai-config";
-import { sendExtractionCompleteEmail } from "@/lib/email-client";
 
 export async function POST(
   req: NextRequest,
@@ -40,14 +39,40 @@ export async function POST(
       userApiKey = undefined;
     }
 
-    // Get user to check if they've used free extraction
+    // Get user to check database-persisted AI settings and free extraction usage
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { hasUsedFreeExtraction: true },
+      select: {
+        hasUsedFreeExtraction: true,
+        aiProvider: true,
+        geminiApiKey: true,
+        geminiModel: true,
+        groqApiKey: true,
+        groqModel: true,
+      },
     });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Fallback provider from database if not explicitly set
+    if (!provider && user.aiProvider) {
+      provider = (user.aiProvider as AiProvider) || "gemini";
+    }
+
+    // Fallback model from database (e.g. custom gemini-3.1-flash-lite)
+    if (!model) {
+      model = provider === "groq"
+        ? (user.groqModel || undefined)
+        : (user.geminiModel || undefined);
+    }
+
+    // Fallback API key from database
+    if (!userApiKey) {
+      userApiKey = provider === "groq"
+        ? (user.groqApiKey || undefined)
+        : (user.geminiApiKey || undefined);
     }
 
     // Check if user has API key or has free extraction available
@@ -75,10 +100,10 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Check if already extracted
-    if (invoice.isExtracted) {
+    // Prevent duplicate extraction if currently in-flight
+    if (invoice.extractionStatus === "processing") {
       return NextResponse.json(
-        { error: "Invoice already extracted" },
+        { error: "Extraction is currently in progress for this invoice" },
         { status: 400 }
       );
     }
@@ -99,12 +124,11 @@ export async function POST(
       });
     }
 
-    // Start background extraction process
+    // Start background extraction process (pure AI extraction, no automated emails)
     processExtraction({
       invoiceId: id,
       r2Key: invoice.r2Key,
       mimeType: invoice.mimeType,
-      userEmail: session.user.email,
       fileName: invoice.fileName,
       provider,
       apiKey: userApiKey,
@@ -114,7 +138,7 @@ export async function POST(
     });
 
     return NextResponse.json({
-      message: "Extraction started. You will receive an email when complete.",
+      message: "Extraction started.",
       status: "processing",
       provider,
     });
@@ -132,7 +156,6 @@ async function processExtraction({
   invoiceId,
   r2Key,
   mimeType,
-  userEmail,
   fileName,
   provider,
   apiKey,
@@ -141,7 +164,6 @@ async function processExtraction({
   invoiceId: string;
   r2Key: string;
   mimeType: string;
-  userEmail: string;
   fileName: string;
   provider: AiProvider;
   apiKey?: string;
@@ -194,12 +216,7 @@ async function processExtraction({
       },
     });
 
-    console.log(`[Extraction] Data saved to database`);
-
-    // Send success email
-    await sendExtractionCompleteEmail(userEmail, fileName, "success", invoiceId);
-
-    console.log(`[Extraction] Success email sent to ${userEmail}`);
+    console.log(`[Extraction] Data saved to database for invoice ${invoiceId}`);
   } catch (error) {
     console.error(`[Extraction] Failed for invoice ${invoiceId}:`, error);
 
@@ -207,15 +224,9 @@ async function processExtraction({
     await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
+        isExtracted: false,
         extractionStatus: "failed",
       },
     });
-
-    // Send failure email
-    try {
-      await sendExtractionCompleteEmail(userEmail, fileName, "failed", invoiceId);
-    } catch (emailError) {
-      console.error("[Extraction] Failed to send failure email:", emailError);
-    }
   }
 }

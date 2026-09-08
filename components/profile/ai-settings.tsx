@@ -56,10 +56,12 @@ export function AiExtractionSettings() {
   const [activeProvider, setActiveProvider] = useState<AiProvider>(DEFAULT_AI_PROVIDER);
 
   // Gemini State
-  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [savedGeminiKey, setSavedGeminiKey] = useState("");
+  const [geminiInput, setGeminiInput] = useState("");
   const [geminiModel, setGeminiModel] = useState(DEFAULT_GEMINI_MODEL);
   const [isEditingGeminiKey, setIsEditingGeminiKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isSavingGeminiKey, setIsSavingGeminiKey] = useState(false);
   const [testingGemini, setTestingGemini] = useState(false);
   const [geminiTestResult, setGeminiTestResult] = useState<{
     success: boolean;
@@ -68,10 +70,12 @@ export function AiExtractionSettings() {
   } | null>(null);
 
   // Groq State
-  const [groqApiKey, setGroqApiKey] = useState("");
+  const [savedGroqKey, setSavedGroqKey] = useState("");
+  const [groqInput, setGroqInput] = useState("");
   const [groqModel, setGroqModel] = useState(DEFAULT_GROQ_MODEL);
   const [isEditingGroqKey, setIsEditingGroqKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
+  const [isSavingGroqKey, setIsSavingGroqKey] = useState(false);
   const [testingGroq, setTestingGroq] = useState(false);
   const [groqTestResult, setGroqTestResult] = useState<{
     success: boolean;
@@ -85,29 +89,102 @@ export function AiExtractionSettings() {
   const [customModelInput, setCustomModelInput] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
 
-  // Load from localStorage on mount
+  // Helper to persist AI settings to database
+  const syncAiConfigToDb = async (payload: {
+    aiProvider?: string;
+    geminiApiKey?: string | null;
+    geminiModel?: string;
+    groqApiKey?: string | null;
+    groqModel?: string;
+  }): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/profile/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        console.warn("Could not sync AI configuration to database");
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error("Error syncing AI configuration to database:", err);
+      return false;
+    }
+  };
+
+  // Load from localStorage initially, then sync with authoritative database
   useEffect(() => {
     setMounted(true);
 
+    // 1. Initial fast local read
     const savedProvider = (localStorage.getItem("ai_provider") as AiProvider) || DEFAULT_AI_PROVIDER;
     setActiveProvider(savedProvider);
 
-    const savedGeminiKey = localStorage.getItem("gemini_api_key") || "";
-    setGeminiApiKey(savedGeminiKey);
+    const localGeminiKey = localStorage.getItem("gemini_api_key") || "";
+    setSavedGeminiKey(localGeminiKey);
+    setGeminiInput(localGeminiKey);
 
     const savedGeminiModel = localStorage.getItem("gemini_model") || DEFAULT_GEMINI_MODEL;
     setGeminiModel(savedGeminiModel);
 
-    const savedGroqKey = localStorage.getItem("groq_api_key") || "";
-    setGroqApiKey(savedGroqKey);
+    const localGroqKey = localStorage.getItem("groq_api_key") || "";
+    setSavedGroqKey(localGroqKey);
+    setGroqInput(localGroqKey);
 
     const savedGroqModel = localStorage.getItem("groq_model") || DEFAULT_GROQ_MODEL;
     setGroqModel(savedGroqModel);
+
+    // 2. Fetch authoritative database-persisted settings
+    const fetchDbAiConfig = async () => {
+      try {
+        const res = await fetch("/api/profile/ai");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.aiConfig) {
+          const cfg = data.aiConfig;
+          if (cfg.aiProvider) {
+            setActiveProvider(cfg.aiProvider as AiProvider);
+            localStorage.setItem("ai_provider", cfg.aiProvider);
+          }
+          if (cfg.geminiApiKey) {
+            setSavedGeminiKey(cfg.geminiApiKey);
+            setGeminiInput(cfg.geminiApiKey);
+            localStorage.setItem("gemini_api_key", cfg.geminiApiKey);
+          } else if (localGeminiKey) {
+            // Local key exists: auto-persist to database
+            await syncAiConfigToDb({ geminiApiKey: localGeminiKey });
+          }
+          if (cfg.geminiModel) {
+            setGeminiModel(cfg.geminiModel);
+            localStorage.setItem("gemini_model", cfg.geminiModel);
+          }
+          if (cfg.groqApiKey) {
+            setSavedGroqKey(cfg.groqApiKey);
+            setGroqInput(cfg.groqApiKey);
+            localStorage.setItem("groq_api_key", cfg.groqApiKey);
+          } else if (localGroqKey) {
+            // Local key exists: auto-persist to database
+            await syncAiConfigToDb({ groqApiKey: localGroqKey });
+          }
+          if (cfg.groqModel) {
+            setGroqModel(cfg.groqModel);
+            localStorage.setItem("groq_model", cfg.groqModel);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load AI config from database:", err);
+      }
+    };
+
+    fetchDbAiConfig();
   }, []);
 
-  const handleSetActiveProvider = (provider: AiProvider) => {
+  const handleSetActiveProvider = async (provider: AiProvider) => {
     setActiveProvider(provider);
     localStorage.setItem("ai_provider", provider);
+    await syncAiConfigToDb({ aiProvider: provider });
     toast({
       title: "Active AI Provider Changed",
       description: `${provider === "gemini" ? "Google Gemini" : "Groq Cloud"} is now your default AI extraction engine.`,
@@ -115,8 +192,9 @@ export function AiExtractionSettings() {
   };
 
   // Gemini Key Actions
-  const handleSaveGeminiKey = () => {
-    if (!geminiApiKey.trim()) {
+  const handleSaveGeminiKey = async () => {
+    const cleanKey = geminiInput.trim();
+    if (!cleanKey) {
       toast({
         title: "Validation Error",
         description: "Please enter a valid Gemini API key",
@@ -124,31 +202,53 @@ export function AiExtractionSettings() {
       });
       return;
     }
-    localStorage.setItem("gemini_api_key", geminiApiKey.trim());
-    setIsEditingGeminiKey(false);
-    setShowGeminiKey(false);
-    setGeminiTestResult(null);
-    toast({
-      title: "Gemini Key Saved",
-      description: "Your Gemini API key has been securely saved locally.",
-    });
+    setIsSavingGeminiKey(true);
+    try {
+      const ok = await syncAiConfigToDb({ geminiApiKey: cleanKey });
+      localStorage.setItem("gemini_api_key", cleanKey);
+      setSavedGeminiKey(cleanKey);
+      setGeminiInput(cleanKey);
+      setIsEditingGeminiKey(false);
+      setShowGeminiKey(false);
+      setGeminiTestResult(null);
+
+      toast({
+        title: "Gemini Key Saved",
+        description: ok
+          ? "Your Gemini API key has been securely saved to the database and will persist across reloads."
+          : "Gemini API key saved locally (database sync had an issue).",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Save Failed",
+        description: err?.message || "Failed to save Gemini API key",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingGeminiKey(false);
+    }
   };
 
-  const handleDeleteGeminiKey = () => {
+  const handleDeleteGeminiKey = async () => {
     localStorage.removeItem("gemini_api_key");
-    setGeminiApiKey("");
+    setSavedGeminiKey("");
+    setGeminiInput("");
     setIsEditingGeminiKey(false);
     setShowGeminiKey(false);
     setGeminiTestResult(null);
+
+    await syncAiConfigToDb({ geminiApiKey: null });
+
     toast({
       title: "Gemini Key Removed",
-      description: "Gemini API key removed from local storage.",
+      description: "Gemini API key removed from your account.",
     });
   };
 
   // Groq Key Actions
-  const handleSaveGroqKey = () => {
-    if (!groqApiKey.trim()) {
+  const handleSaveGroqKey = async () => {
+    const cleanKey = groqInput.trim();
+    if (!cleanKey) {
       toast({
         title: "Validation Error",
         description: "Please enter a valid Groq API key",
@@ -156,43 +256,67 @@ export function AiExtractionSettings() {
       });
       return;
     }
-    localStorage.setItem("groq_api_key", groqApiKey.trim());
-    setIsEditingGroqKey(false);
-    setShowGroqKey(false);
-    setGroqTestResult(null);
-    toast({
-      title: "Groq Key Saved",
-      description: "Your Groq API key has been securely saved locally.",
-    });
+    setIsSavingGroqKey(true);
+    try {
+      const ok = await syncAiConfigToDb({ groqApiKey: cleanKey });
+      localStorage.setItem("groq_api_key", cleanKey);
+      setSavedGroqKey(cleanKey);
+      setGroqInput(cleanKey);
+      setIsEditingGroqKey(false);
+      setShowGroqKey(false);
+      setGroqTestResult(null);
+
+      toast({
+        title: "Groq Key Saved",
+        description: ok
+          ? "Your Groq API key has been securely saved to the database and will persist across reloads."
+          : "Groq API key saved locally (database sync had an issue).",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Save Failed",
+        description: err?.message || "Failed to save Groq API key",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingGroqKey(false);
+    }
   };
 
-  const handleDeleteGroqKey = () => {
+  const handleDeleteGroqKey = async () => {
     localStorage.removeItem("groq_api_key");
-    setGroqApiKey("");
+    setSavedGroqKey("");
+    setGroqInput("");
     setIsEditingGroqKey(false);
     setShowGroqKey(false);
     setGroqTestResult(null);
+
+    await syncAiConfigToDb({ groqApiKey: null });
+
     toast({
       title: "Groq Key Removed",
-      description: "Groq API key removed from local storage.",
+      description: "Groq API key removed from your account.",
     });
   };
 
-  // Model Selection Actions
-  const handleSelectModel = (modelId: string) => {
+  // Model Selection Actions (Persisted to database)
+  const handleSelectModel = async (modelId: string) => {
+    const cleanModel = modelId.trim();
     if (activeProvider === "gemini") {
-      setGeminiModel(modelId);
-      localStorage.setItem("gemini_model", modelId);
+      setGeminiModel(cleanModel);
+      localStorage.setItem("gemini_model", cleanModel);
+      await syncAiConfigToDb({ geminiModel: cleanModel });
     } else {
-      setGroqModel(modelId);
-      localStorage.setItem("groq_model", modelId);
+      setGroqModel(cleanModel);
+      localStorage.setItem("groq_model", cleanModel);
+      await syncAiConfigToDb({ groqModel: cleanModel });
     }
     setIsModelPickerOpen(false);
     setModelSearch("");
     setShowCustomInput(false);
     toast({
-      title: "Model Updated",
-      description: `Active model set to ${modelId}`,
+      title: "Model Updated & Saved",
+      description: `Active model set to ${cleanModel} and persisted to your account.`,
     });
   };
 
@@ -204,7 +328,7 @@ export function AiExtractionSettings() {
 
   // Connectivity Test
   const handleTestConnection = async (provider: AiProvider) => {
-    const key = provider === "gemini" ? geminiApiKey : groqApiKey;
+    const key = provider === "gemini" ? (savedGeminiKey || geminiInput) : (savedGroqKey || groqInput);
     const model = provider === "gemini" ? geminiModel : groqModel;
 
     if (!key || !key.trim()) {
@@ -384,7 +508,7 @@ export function AiExtractionSettings() {
           </div>
 
           <div className="flex items-center gap-2">
-            {(activeProvider === "gemini" ? geminiApiKey : groqApiKey) ? (
+            {(activeProvider === "gemini" ? savedGeminiKey : savedGroqKey) ? (
               <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 gap-1 py-1">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 API Key Configured
@@ -423,16 +547,23 @@ export function AiExtractionSettings() {
                 </a>
               </div>
 
-              {isEditingGeminiKey || !geminiApiKey ? (
+              {isEditingGeminiKey || !savedGeminiKey ? (
                 <div className="space-y-2.5">
                   <div className="relative">
                     <Input
                       id="geminiApiKey"
                       type={showGeminiKey ? "text" : "password"}
-                      value={geminiApiKey}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                      value={geminiInput}
+                      onChange={(e) => setGeminiInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleSaveGeminiKey();
+                        }
+                      }}
                       placeholder="AIzaSy..."
                       className="pr-10 font-mono text-sm"
+                      autoFocus={isEditingGeminiKey}
                     />
                     <button
                       type="button"
@@ -446,19 +577,27 @@ export function AiExtractionSettings() {
                     <Button
                       size="sm"
                       onClick={handleSaveGeminiKey}
-                      disabled={!geminiApiKey.trim()}
-                      className="gap-1.5 h-8 text-xs"
+                      disabled={!geminiInput.trim() || isSavingGeminiKey}
+                      className="gap-1.5 h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
                     >
-                      <Save className="h-3.5 w-3.5" />
-                      Save Key
+                      {isSavingGeminiKey ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Saving Key...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          Save Key
+                        </>
+                      )}
                     </Button>
-                    {geminiApiKey && (
+                    {savedGeminiKey && (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          const saved = localStorage.getItem("gemini_api_key") || "";
-                          setGeminiApiKey(saved);
+                          setGeminiInput(savedGeminiKey);
                           setIsEditingGeminiKey(false);
                         }}
                         className="h-8 text-xs"
@@ -473,12 +612,13 @@ export function AiExtractionSettings() {
                   <div className="flex items-center gap-2 font-mono text-sm">
                     <Key className="h-4 w-4 text-emerald-500" />
                     <span className="text-muted-foreground">
-                      {showGeminiKey ? geminiApiKey : "AIzaSy••••••••••••••••••••••••••••••••"}
+                      {showGeminiKey ? savedGeminiKey : "AIzaSy••••••••••••••••••••••••••••••••"}
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowGeminiKey(!showGeminiKey)}
                       className="text-muted-foreground hover:text-foreground ml-1 p-0.5 rounded"
+                      title={showGeminiKey ? "Hide API key" : "Show API key"}
                     >
                       {showGeminiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
@@ -506,7 +646,10 @@ export function AiExtractionSettings() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setIsEditingGeminiKey(true)}
+                      onClick={() => {
+                        setGeminiInput(savedGeminiKey);
+                        setIsEditingGeminiKey(true);
+                      }}
                       className="h-7 text-xs gap-1"
                     >
                       <PenSquare className="h-3 w-3" />
@@ -517,6 +660,7 @@ export function AiExtractionSettings() {
                       variant="ghost"
                       onClick={handleDeleteGeminiKey}
                       className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      title="Delete key"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -577,16 +721,23 @@ export function AiExtractionSettings() {
                 </a>
               </div>
 
-              {isEditingGroqKey || !groqApiKey ? (
+              {isEditingGroqKey || !savedGroqKey ? (
                 <div className="space-y-2.5">
                   <div className="relative">
                     <Input
                       id="groqApiKey"
                       type={showGroqKey ? "text" : "password"}
-                      value={groqApiKey}
-                      onChange={(e) => setGroqApiKey(e.target.value)}
+                      value={groqInput}
+                      onChange={(e) => setGroqInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleSaveGroqKey();
+                        }
+                      }}
                       placeholder="gsk_..."
                       className="pr-10 font-mono text-sm"
+                      autoFocus={isEditingGroqKey}
                     />
                     <button
                       type="button"
@@ -600,19 +751,27 @@ export function AiExtractionSettings() {
                     <Button
                       size="sm"
                       onClick={handleSaveGroqKey}
-                      disabled={!groqApiKey.trim()}
-                      className="gap-1.5 h-8 text-xs"
+                      disabled={!groqInput.trim() || isSavingGroqKey}
+                      className="gap-1.5 h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
                     >
-                      <Save className="h-3.5 w-3.5" />
-                      Save Key
+                      {isSavingGroqKey ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Saving Key...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          Save Key
+                        </>
+                      )}
                     </Button>
-                    {groqApiKey && (
+                    {savedGroqKey && (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          const saved = localStorage.getItem("groq_api_key") || "";
-                          setGroqApiKey(saved);
+                          setGroqInput(savedGroqKey);
                           setIsEditingGroqKey(false);
                         }}
                         className="h-8 text-xs"
@@ -627,12 +786,13 @@ export function AiExtractionSettings() {
                   <div className="flex items-center gap-2 font-mono text-sm">
                     <Key className="h-4 w-4 text-emerald-500" />
                     <span className="text-muted-foreground">
-                      {showGroqKey ? groqApiKey : "gsk_••••••••••••••••••••••••••••••••"}
+                      {showGroqKey ? savedGroqKey : "gsk_••••••••••••••••••••••••••••••••"}
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowGroqKey(!showGroqKey)}
                       className="text-muted-foreground hover:text-foreground ml-1 p-0.5 rounded"
+                      title={showGroqKey ? "Hide API key" : "Show API key"}
                     >
                       {showGroqKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
@@ -660,7 +820,10 @@ export function AiExtractionSettings() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setIsEditingGroqKey(true)}
+                      onClick={() => {
+                        setGroqInput(savedGroqKey);
+                        setIsEditingGroqKey(true);
+                      }}
                       className="h-7 text-xs gap-1"
                     >
                       <PenSquare className="h-3 w-3" />
@@ -671,6 +834,7 @@ export function AiExtractionSettings() {
                       variant="ghost"
                       onClick={handleDeleteGroqKey}
                       className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      title="Delete key"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>

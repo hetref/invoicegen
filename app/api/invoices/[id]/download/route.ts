@@ -34,10 +34,11 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Generate presigned URL
-    const downloadUrl = await getDownloadPresignedUrl(invoice.r2Key);
+    // Route download through /api/invoices/${id}/file to ensure DevAlly PAID stamp is embedded
+    const downloadUrl = `/api/invoices/${id}/file?download=1`;
+    const previewUrl = `/api/invoices/${id}/file`;
 
-    return NextResponse.json({ downloadUrl, fileName: invoice.fileName });
+    return NextResponse.json({ downloadUrl, previewUrl, fileName: invoice.fileName });
   } catch (error) {
     console.error("Error generating download URL:", error);
     return NextResponse.json(

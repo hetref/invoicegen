@@ -28,6 +28,11 @@ export async function GET(req: NextRequest) {
         createdAt: true,
         lastLoginMethod: true,
         hasUsedFreeExtraction: true,
+        aiProvider: true,
+        geminiApiKey: true,
+        geminiModel: true,
+        groqApiKey: true,
+        groqModel: true,
         storageLimit: true,
         maxInvoices: true,
         role: true,
@@ -71,10 +76,27 @@ export async function GET(req: NextRequest) {
       ? Math.min(100, (totalSize / storageLimit) * 100).toFixed(2)
       : "0.00";
 
+    const logoUrl = user.image
+      ? user.image.startsWith("http://") || user.image.startsWith("https://")
+        ? user.image
+        : "/api/profile/logo"
+      : null;
+
     return NextResponse.json({
       user: {
         ...user,
+        logoUrl,
+        hasLogo: Boolean(user.image),
         storageLimit,
+      },
+      aiConfig: {
+        aiProvider: user.aiProvider || "gemini",
+        geminiApiKey: user.geminiApiKey || "",
+        geminiModel: user.geminiModel || "gemini-2.5-flash",
+        groqApiKey: user.groqApiKey || "",
+        groqModel: user.groqModel || "llama-3.3-70b-versatile",
+        hasGeminiKey: Boolean(user.geminiApiKey),
+        hasGroqKey: Boolean(user.groqApiKey),
       },
       stats: {
         totalInvoices,
@@ -98,7 +120,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH - Update user profile (Only permitted profile fields)
+// PATCH - Update user profile (profile and AI configuration fields)
 export async function PATCH(req: NextRequest) {
   try {
     const session = await auth.api.getSession({
@@ -110,9 +132,17 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, image } = body;
+    const {
+      name,
+      image,
+      aiProvider,
+      geminiApiKey,
+      geminiModel,
+      groqApiKey,
+      groqModel,
+    } = body;
 
-    // Strict whitelist: Only name and image can ever be updated by the user
+    // Strict validation for name if provided
     if (name !== undefined && (!name || typeof name !== "string" || name.trim().length === 0)) {
       return NextResponse.json(
         { error: "Name cannot be empty" },
@@ -120,9 +150,44 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const dataToUpdate: { name?: string; image?: string | null } = {};
+    const dataToUpdate: {
+      name?: string;
+      image?: string | null;
+      aiProvider?: string;
+      geminiApiKey?: string | null;
+      geminiModel?: string;
+      groqApiKey?: string | null;
+      groqModel?: string;
+    } = {};
+
     if (name !== undefined) dataToUpdate.name = name.trim();
     if (image !== undefined) dataToUpdate.image = typeof image === "string" ? image : null;
+
+    if (aiProvider !== undefined && (aiProvider === "gemini" || aiProvider === "groq")) {
+      dataToUpdate.aiProvider = aiProvider;
+    }
+
+    if (geminiApiKey !== undefined) {
+      dataToUpdate.geminiApiKey =
+        typeof geminiApiKey === "string" && geminiApiKey.trim().length > 0
+          ? geminiApiKey.trim()
+          : null;
+    }
+
+    if (geminiModel !== undefined && typeof geminiModel === "string" && geminiModel.trim().length > 0) {
+      dataToUpdate.geminiModel = geminiModel.trim();
+    }
+
+    if (groqApiKey !== undefined) {
+      dataToUpdate.groqApiKey =
+        typeof groqApiKey === "string" && groqApiKey.trim().length > 0
+          ? groqApiKey.trim()
+          : null;
+    }
+
+    if (groqModel !== undefined && typeof groqModel === "string" && groqModel.trim().length > 0) {
+      dataToUpdate.groqModel = groqModel.trim();
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: session.user.id },
@@ -134,6 +199,12 @@ export async function PATCH(req: NextRequest) {
         image: true,
         createdAt: true,
         lastLoginMethod: true,
+        hasUsedFreeExtraction: true,
+        aiProvider: true,
+        geminiApiKey: true,
+        geminiModel: true,
+        groqApiKey: true,
+        groqModel: true,
         storageLimit: true,
         maxInvoices: true,
         role: true,
@@ -144,6 +215,15 @@ export async function PATCH(req: NextRequest) {
       user: {
         ...updatedUser,
         storageLimit: Number(updatedUser?.storageLimit ?? DEFAULT_STORAGE_LIMIT),
+      },
+      aiConfig: {
+        aiProvider: updatedUser.aiProvider || "gemini",
+        geminiApiKey: updatedUser.geminiApiKey || "",
+        geminiModel: updatedUser.geminiModel || "gemini-2.5-flash",
+        groqApiKey: updatedUser.groqApiKey || "",
+        groqModel: updatedUser.groqModel || "llama-3.3-70b-versatile",
+        hasGeminiKey: Boolean(updatedUser.geminiApiKey),
+        hasGroqKey: Boolean(updatedUser.groqApiKey),
       },
     });
   } catch (error) {

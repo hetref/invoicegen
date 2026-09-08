@@ -21,7 +21,13 @@ export async function GET(req: NextRequest) {
       orderBy: { uploadedAt: "desc" },
     });
 
-    return NextResponse.json({ invoices });
+    const mappedInvoices = invoices.map((inv) => ({
+      ...inv,
+      isPaid: Boolean((inv.paymentDetails as any)?.isPaid),
+      paidAt: (inv.paymentDetails as any)?.paidAt || null,
+    }));
+
+    return NextResponse.json({ invoices: mappedInvoices });
   } catch (error) {
     console.error("Error fetching invoices:", error);
     return NextResponse.json(

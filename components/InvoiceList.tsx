@@ -78,6 +78,7 @@ import {
   FileCode,
   Image as ImageIcon,
   Check,
+  Edit,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -85,6 +86,7 @@ import { MoveInvoiceDialog } from "./MoveInvoiceDialog";
 import { Group } from "./GroupTree";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { firePaidCelebration } from "@/lib/confetti";
 
 export interface InvoiceItem {
   id: string;
@@ -103,6 +105,8 @@ export interface InvoiceItem {
   paymentToName?: string | null;
   totalAmount?: number | null;
   currency?: string | null;
+  isPaid?: boolean;
+  paidAt?: string | null;
 }
 
 interface InvoiceListProps {
@@ -173,6 +177,56 @@ export function InvoiceList({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleTogglePaid = async (e: React.MouseEvent, invoice: InvoiceItem) => {
+    e.stopPropagation();
+    const nextPaid = !invoice.isPaid;
+
+    if (nextPaid) {
+      firePaidCelebration({ x: e.clientX, y: e.clientY });
+    }
+
+    // Optimistic UI update
+    setInvoices((prev) =>
+      prev.map((inv) =>
+        inv.id === invoice.id
+          ? {
+              ...inv,
+              isPaid: nextPaid,
+              paidAt: nextPaid ? new Date().toISOString() : null,
+            }
+          : inv
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPaid: nextPaid }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update status");
+
+      toast({
+        title: nextPaid ? "Invoice Paid" : "Invoice Unmarked",
+        description: nextPaid
+          ? `${invoice.fileName} marked as Paid with DevAlly verified stamp.`
+          : `${invoice.fileName} marked as unpaid.`,
+      });
+    } catch (err) {
+      console.error("Error updating paid status:", err);
+      // Revert on error
+      setInvoices((prev) =>
+        prev.map((inv) => (inv.id === invoice.id ? { ...inv, isPaid: invoice.isPaid } : inv))
+      );
+      toast({
+        title: "Error",
+        description: "Failed to update payment status.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -278,8 +332,8 @@ export function InvoiceList({
       const response = await fetch(`/api/invoices/${invoice.id}/download`);
       if (!response.ok) throw new Error("Failed to get preview URL");
 
-      const { downloadUrl } = await response.json();
-      setPreviewUrl(downloadUrl);
+      const { downloadUrl, previewUrl } = await response.json();
+      setPreviewUrl(previewUrl || downloadUrl);
     } catch (error) {
       console.error("Preview error:", error);
       toast({
@@ -700,6 +754,7 @@ export function InvoiceList({
                     <TableHead className="text-xs font-semibold h-9">Invoice File</TableHead>
                     <TableHead className="text-xs font-semibold h-9 hidden md:table-cell">Client / Vendor</TableHead>
                     <TableHead className="text-xs font-semibold h-9 text-right">Amount</TableHead>
+                    <TableHead className="text-xs font-semibold h-9 text-center">Status</TableHead>
                     <TableHead className="text-xs font-semibold h-9 hidden sm:table-cell text-right">Size</TableHead>
                     <TableHead className="text-xs font-semibold h-9 hidden lg:table-cell">Uploaded</TableHead>
                     <TableHead className="text-xs font-semibold h-9 text-right pr-4">Actions</TableHead>
@@ -780,6 +835,32 @@ export function InvoiceList({
                               )}
                             </TableCell>
 
+                            {/* Status / Paid Interactive Toggle */}
+                            <TableCell className="text-center py-2.5">
+                              <button
+                                type="button"
+                                onClick={(e) => handleTogglePaid(e, invoice)}
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-all duration-200 cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+                                  invoice.isPaid
+                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+                                    : "bg-muted/60 text-muted-foreground border-border/80 hover:bg-muted hover:text-foreground"
+                                }`}
+                                title={invoice.isPaid ? "Click to mark as Unpaid" : "Click to mark as Paid (fires celebration)"}
+                              >
+                                {invoice.isPaid ? (
+                                  <>
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                                    <span className="font-semibold">Paid</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 shrink-0" />
+                                    <span>Unpaid</span>
+                                  </>
+                                )}
+                              </button>
+                            </TableCell>
+
                             {/* Size */}
                             <TableCell className="hidden sm:table-cell text-right py-2.5 text-xs font-mono text-muted-foreground tabular-nums">
                               {formatFileSize(invoice.fileSize)}
@@ -805,6 +886,20 @@ export function InvoiceList({
                                 >
                                   <Eye className="h-3.5 w-3.5" />
                                 </Button>
+                                {invoice.isManuallyCreated && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(`/new?invoiceId=${invoice.id}`);
+                                    }}
+                                    title="Edit Invoice"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -852,6 +947,16 @@ export function InvoiceList({
                             <ExternalLink className="h-3.5 w-3.5" />
                             Open Details Page
                           </ContextMenuItem>
+                          <ContextMenuItem onClick={(e) => handleTogglePaid(e as any, invoice)} className="gap-2">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                            {invoice.isPaid ? "Mark as Unpaid" : "Mark as Paid"}
+                          </ContextMenuItem>
+                          {invoice.isManuallyCreated && (
+                            <ContextMenuItem onClick={() => router.push(`/new?invoiceId=${invoice.id}`)} className="gap-2">
+                              <Edit className="h-3.5 w-3.5" />
+                              Edit Invoice
+                            </ContextMenuItem>
+                          )}
                           <ContextMenuItem onClick={() => handleView(invoice)} className="gap-2">
                             <Eye className="h-3.5 w-3.5" />
                             Quick Preview
@@ -919,6 +1024,16 @@ export function InvoiceList({
                             <ExternalLink className="h-3.5 w-3.5" />
                             View
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={(e) => handleTogglePaid(e as any, invoice)} className="gap-2">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                            {invoice.isPaid ? "Mark as Unpaid" : "Mark as Paid"}
+                          </DropdownMenuItem>
+                          {invoice.isManuallyCreated && (
+                            <DropdownMenuItem onClick={() => router.push(`/new?invoiceId=${invoice.id}`)} className="gap-2">
+                              <Edit className="h-3.5 w-3.5" />
+                              Edit
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => handleDownload(invoice)} className="gap-2">
                             <Download className="h-3.5 w-3.5" />
                             Download
@@ -952,6 +1067,28 @@ export function InvoiceList({
                       </div>
 
                       <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => handleTogglePaid(e, invoice)}
+                          className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+                            invoice.isPaid
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                              : "bg-muted/60 text-muted-foreground border-border/80 hover:bg-muted"
+                          }`}
+                          title={invoice.isPaid ? "Mark as Unpaid" : "Mark as Paid"}
+                        >
+                          {invoice.isPaid ? (
+                            <>
+                              <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+                              <span className="font-semibold">Paid</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400" />
+                              <span>Unpaid</span>
+                            </>
+                          )}
+                        </button>
                         {invoice.isExtracted && (
                           <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                             Extracted

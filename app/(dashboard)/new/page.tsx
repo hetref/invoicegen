@@ -5,10 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Trash2, Eye, Loader2 } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
+import { Plus, Trash2, Eye, Loader2, Image as ImageIcon, ExternalLink, CheckCircle2 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
+import { PaidStamp } from "@/components/ui/paid-stamp"
+import { firePaidCelebration } from "@/lib/confetti"
 
 interface InvoiceItem {
   no: number
@@ -21,6 +26,10 @@ interface InvoiceItem {
 interface InvoiceData {
   date: string
   invoiceNo: string
+  includeLogo?: boolean
+  logoUrl?: string | null
+  isPaid?: boolean
+  paidAt?: string | null
   billedTo: {
     name: string
     address: string
@@ -37,6 +46,8 @@ interface InvoiceData {
     accountType: string
     branch: string
     upi: string
+    isPaid?: boolean
+    paidAt?: string | null
   }
   contact: {
     phone: string
@@ -51,7 +62,9 @@ export default function EditInvoicePage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
-  
+  const [profileLogoUrl, setProfileLogoUrl] = useState<string | null>(null)
+  const [hasProfileLogo, setHasProfileLogo] = useState(false)
+
   const groupId = searchParams.get("groupId")
   const invoiceId = searchParams.get("invoiceId")
 
@@ -62,6 +75,8 @@ export default function EditInvoicePage() {
       year: "numeric",
     }),
     invoiceNo: `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+    includeLogo: true,
+    logoUrl: null,
     billedTo: {
       name: "",
       address: "",
@@ -94,24 +109,57 @@ export default function EditInvoicePage() {
     },
   })
 
-  // Load invoice data for editing or from localStorage
+  // Load invoice data for editing or from localStorage + fetch profile logo
   useEffect(() => {
-    const loadInvoiceData = async () => {
+    const loadData = async () => {
+      setLoading(true)
+      let currentLogo: string | null = null
+
+      try {
+        const profRes = await fetch("/api/profile")
+        if (profRes.ok) {
+          const profData = await profRes.json()
+          const logo =
+            profData.user?.logoUrl ||
+            (profData.user?.image
+              ? profData.user.image.startsWith("http")
+                ? profData.user.image
+                : "/api/profile/logo"
+              : null)
+          setProfileLogoUrl(logo)
+          setHasProfileLogo(Boolean(logo))
+          currentLogo = logo
+        }
+      } catch (e) {
+        console.error("Error fetching profile logo:", e)
+      }
+
       if (invoiceId) {
         // Load existing invoice for editing
-        setLoading(true)
         setIsEditing(true)
         try {
           const response = await fetch(`/api/invoices/${invoiceId}`)
           if (!response.ok) throw new Error("Failed to load invoice")
-          
+
           const data = await response.json()
           const invoice = data.invoice
+
+          const includeLogo =
+            invoice.contactInfo?.includeLogo !== undefined
+              ? Boolean(invoice.contactInfo.includeLogo)
+              : Boolean(currentLogo)
+
+          const isPaid = Boolean(invoice.paymentDetails?.isPaid || invoice.isPaid)
+          const paidAt = invoice.paymentDetails?.paidAt || invoice.paidAt || null
 
           // Transform database invoice to form data
           setInvoiceData({
             date: invoice.invoiceDate || "",
             invoiceNo: invoice.invoiceNumber || "",
+            includeLogo,
+            logoUrl: invoice.contactInfo?.logoUrl || currentLogo,
+            isPaid,
+            paidAt,
             billedTo: {
               name: invoice.billedToName || "",
               address: invoice.billedToAddress || "",
@@ -121,13 +169,18 @@ export default function EditInvoicePage() {
               name: invoice.paymentToName || "",
               address: invoice.paymentToAddress || "",
             },
-            items: invoice.items || [],
-            paymentDetails: invoice.paymentDetails || {
-              accountNumber: "",
-              ifsc: "",
-              accountType: "",
-              branch: "",
-              upi: "",
+            items:
+              invoice.items && invoice.items.length > 0
+                ? invoice.items
+                : [{ no: 1, description: "", price: 0, qty: 1, subtotal: 0 }],
+            paymentDetails: {
+              accountNumber: invoice.paymentDetails?.accountNumber || "",
+              ifsc: invoice.paymentDetails?.ifsc || "",
+              accountType: invoice.paymentDetails?.accountType || "",
+              branch: invoice.paymentDetails?.branch || "",
+              upi: invoice.paymentDetails?.upi || "",
+              isPaid,
+              paidAt,
             },
             contact: invoice.contactInfo || {
               phone: "",
@@ -146,26 +199,52 @@ export default function EditInvoicePage() {
           setLoading(false)
         }
       } else {
+        // Clear old edit session IDs from localStorage
+        localStorage.removeItem("invoiceId")
+        localStorage.removeItem("invoiceGroupId")
+        setIsEditing(false)
+
         // Load from localStorage if available
         const saved = localStorage.getItem("invoiceData")
         if (saved) {
           try {
-            setInvoiceData(JSON.parse(saved))
+            const parsed = JSON.parse(saved)
+            const isPaid = Boolean(parsed.isPaid || parsed.paymentDetails?.isPaid)
+            const paidAt = parsed.paidAt || parsed.paymentDetails?.paidAt || null
+
+            setInvoiceData({
+              ...parsed,
+              isPaid,
+              paidAt,
+              paymentDetails: {
+                ...(parsed.paymentDetails || {}),
+                isPaid,
+                paidAt,
+              },
+              includeLogo:
+                parsed.includeLogo !== undefined ? parsed.includeLogo : Boolean(currentLogo),
+              logoUrl: parsed.logoUrl || currentLogo,
+            })
           } catch (error) {
             console.error("Error parsing saved invoice data:", error)
           }
+        } else {
+          setInvoiceData((prev) => ({
+            ...prev,
+            includeLogo: Boolean(currentLogo),
+            logoUrl: currentLogo,
+          }))
         }
+        setLoading(false)
       }
     }
 
-    loadInvoiceData()
+    loadData()
   }, [invoiceId])
 
   useEffect(() => {
     if (invoiceData) {
-      console.log("Auto-saving invoice data to localStorage")
       localStorage.setItem("invoiceData", JSON.stringify(invoiceData))
-      console.log("Data saved successfully")
     }
   }, [invoiceData])
 
@@ -223,16 +302,16 @@ export default function EditInvoicePage() {
   const handleSaveAndPreview = () => {
     console.log("Navigating to preview page")
     console.log("Current invoice data:", invoiceData)
-    
+
     // Save groupId and invoiceId to localStorage for preview page
     localStorage.setItem("invoiceGroupId", groupId || "")
     localStorage.setItem("invoiceId", invoiceId || "")
-    
+
     // Data is already saved via useEffect, just navigate
     const params = new URLSearchParams()
     if (groupId) params.set("groupId", groupId)
     if (invoiceId) params.set("invoiceId", invoiceId)
-    
+
     router.push(`/preview${params.toString() ? `?${params.toString()}` : ""}`)
   }
 
@@ -278,6 +357,93 @@ export default function EditInvoicePage() {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Branding & Logo */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                    <ImageIcon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold">Branding & Company Logo</CardTitle>
+                    <CardDescription className="text-xs">
+                      Optionally display your company logo on the generated invoice and PDF
+                    </CardDescription>
+                  </div>
+                </div>
+                {hasProfileLogo && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                  >
+                    Profile Logo Available
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {hasProfileLogo ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3.5 rounded-xl border border-border/70 bg-muted/20">
+                  <div className="flex items-center gap-3.5">
+                    <div
+                      className="w-16 h-12 rounded-lg border border-border/80 flex items-center justify-center p-1.5 bg-white shadow-2xs overflow-hidden shrink-0"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)",
+                        backgroundSize: "8px 8px",
+                      }}
+                    >
+                      <img
+                        src={profileLogoUrl || "/api/profile/logo"}
+                        alt="Profile Logo"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label htmlFor="includeLogo" className="text-xs font-semibold cursor-pointer text-foreground">
+                        Include company logo in this invoice
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Displayed at the top of the invoice header.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    <Checkbox
+                      id="includeLogo"
+                      checked={Boolean(invoiceData.includeLogo)}
+                      onCheckedChange={(checked) => {
+                        setInvoiceData((prev) => ({
+                          ...prev,
+                          includeLogo: Boolean(checked),
+                          logoUrl: checked ? profileLogoUrl || "/api/profile/logo" : null,
+                        }))
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-dashed border-border/80 bg-muted/10 text-xs">
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-foreground">No brand logo found in profile</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Upload your brand logo in your Profile to automatically display it on invoices.
+                    </p>
+                  </div>
+                  <Link
+                    href="/profile"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline shrink-0"
+                  >
+                    <span>Upload Logo</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -454,6 +620,63 @@ export default function EditInvoicePage() {
                   value={invoiceData.paymentDetails.upi}
                   onChange={(e) => updateField(["paymentDetails", "upi"], e.target.value)}
                 />
+              </div>
+
+              {/* DevAlly Verified Paid Status Toggle */}
+              <div className="pt-3 border-t border-border/60">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-neutral-50/80 dark:bg-neutral-900/50 border border-neutral-200/80 dark:border-neutral-800">
+                  <div className="flex items-start space-x-3">
+                    <Checkbox
+                      id="isPaidCheckbox"
+                      checked={Boolean(invoiceData.isPaid)}
+                      onCheckedChange={(checked) => {
+                        const val = Boolean(checked)
+                        if (val) {
+                          firePaidCelebration()
+                        }
+                        const updatedPaidAt = val
+                          ? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          : null
+                        setInvoiceData((prev) => ({
+                          ...prev,
+                          isPaid: val,
+                          paidAt: updatedPaidAt,
+                          paymentDetails: {
+                            ...prev.paymentDetails,
+                            isPaid: val,
+                            paidAt: updatedPaidAt,
+                          },
+                        }))
+                        toast({
+                          title: val ? "DevAlly PAID Stamp Enabled! 🎉" : "Marked as Unpaid",
+                          description: val
+                            ? "Translucent DevAlly verified PAID stamp will appear on the invoice."
+                            : "Invoice marked as pending / unpaid.",
+                        })
+                      }}
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="isPaidCheckbox" className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 cursor-pointer flex items-center gap-2">
+                        <span>Mark Invoice as Settled / Paid</span>
+                        {invoiceData.isPaid && (
+                          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] font-semibold">
+                            DevAlly Verified
+                          </Badge>
+                        )}
+                      </Label>
+                      <p className="text-xs text-neutral-500">
+                        Applies a translucent DevAlly verified PAID stamp across your invoice and PDF download.
+                      </p>
+                    </div>
+                  </div>
+
+                  {invoiceData.isPaid && (
+                    <div className="self-center sm:self-auto shrink-0 animate-in fade-in zoom-in-95 duration-200">
+                      <PaidStamp date={invoiceData.paidAt || undefined} size="sm" />
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
